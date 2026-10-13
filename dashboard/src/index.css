@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0a0c10;
+  --color-bg-soft: #0d1017;
+  --color-surface: #121724;
+  --color-line: #202839;
+  --color-ink: #e8ecf4;
+  --color-muted: #a3aec4;
+  --color-dim: #6f7c94;
+  --color-accent: #4f8cff;
+  --color-accent2: #8b5cf6;
+  --color-ok: #34d399;
+  --color-bad: #f87171;
+  --color-warn: #fbbf24;
+
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Space Grotesk Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(79, 140, 255, 0.35);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+}
+
+/* Accent gradient used for display text and primary actions. */
+@utility gradient-text {
+  background-image: linear-gradient(100deg, var(--color-accent), var(--color-accent2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Soft gradient mesh behind the header. */
+@utility mesh {
+  background-image:
+    radial-gradient(42rem 22rem at 10% -6%, rgba(79, 140, 255, 0.2), transparent 68%),
+    radial-gradient(38rem 20rem at 92% 4%, rgba(139, 92, 246, 0.17), transparent 70%),
+    radial-gradient(30rem 18rem at 50% 118%, rgba(79, 140, 255, 0.1), transparent 70%);
+}
