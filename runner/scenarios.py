@@ -35,9 +35,6 @@ SETTLE_S5_S = 0.5
 # S6 reads the journal after each request (per-request hit windows); same tight
 # settle so the deliberate cooldown wait can start as early as possible.
 SETTLE_S6_S = 0.5
-# S5 request C fires this many seconds after the first err-429 hit
-# (quick cooldown_time is 8s; 9.5s gives a 1.5s margin for the expiry check).
-S5_COOLDOWN_EXPIRY_S = 9.5
 # S5 request C (cooldown-expired re-hit) is an optional extra claim. It is kept
 # only while it passes reliably; flip to False to drop it entirely.
 S5_EXPIRY_CHECK = True
@@ -292,9 +289,10 @@ def scenario_stall_mid_surface_error(ctx: Context) -> ScenarioResult:
         for e in stalled
     )
     assertion_2 = AssertionResult(
-        "turn fails: no successful [DONE] completion, error surfaced",
-        not stream.success,
-        f"manifestation={stream.manifestation()}; done={stream.done}; "
+        "turn fails: no successful [DONE] completion; in-band SSE error event surfaced",
+        not stream.success and stream.error_event is not None,
+        f"manifestation={stream.manifestation()}; "
+        f"error_event={stream.error_event or 'none'}; done={stream.done}; "
         f"status={stream.status_code}",
     )
     assertions = [
@@ -406,7 +404,7 @@ def scenario_sat_429_cooldown_spillover(ctx: Context) -> ScenarioResult:
     journal_a = ctx.fetch_journal(tl, settle_s=SETTLE_S5_S)
     a_hits = len(_entries(journal_a, "err-429"))
     a_healthy = len(_completed(journal_a, "healthy"))
-    first_429_ts = min(
+    last_429_ts = max(
         (e["ts"] for e in _entries(journal_a, "err-429") if "ts" in e),
         default=None,
     )
@@ -421,17 +419,21 @@ def scenario_sat_429_cooldown_spillover(ctx: Context) -> ScenarioResult:
     tl.add("cooldown_check", f"err-429 hit delta after B = {delta_b} (expected 0)")
 
     # Request C (optional): after cooldown expiry the deployment is eligible again.
+    # The wait is derived from the active profile's cooldown_time (+ 1.5s margin),
+    # like S6: ~9.5s in quick, ~121.5s in full.
+    cooldown_s = float(ctx.settings.router_settings.get("cooldown_time") or 8.0)
     request_c: CompletionOutcome | None = None
     delta_c: int | None = None
-    if S5_EXPIRY_CHECK and first_429_ts is not None:
-        wait_s = (first_429_ts + S5_COOLDOWN_EXPIRY_S) - time.time()
+    journal_final = journal_b
+    if S5_EXPIRY_CHECK and last_429_ts is not None:
+        wait_s = (last_429_ts + cooldown_s + 1.5) - time.time()
         if wait_s > 0:
             tl.add("cooldown_wait", f"sleeping {wait_s:.2f}s until cooldown expiry")
             time.sleep(wait_s)
         tl.add("request_C", "non-stream mode-err-429 (after cooldown expiry)")
         request_c = ctx.lab.chat_once("mode-err-429", USER_MESSAGE, emit=tl.add)
-        journal_c = ctx.fetch_journal(tl, settle_s=SETTLE_S5_S)
-        delta_c = len(_entries(journal_c, "err-429")) - b_hits
+        journal_final = ctx.fetch_journal(tl, settle_s=SETTLE_S5_S)
+        delta_c = len(_entries(journal_final, "err-429")) - b_hits
         tl.add("cooldown_expired_check", f"err-429 hit delta after C = {delta_c}")
 
     duration = time.monotonic() - started
@@ -463,7 +465,7 @@ def scenario_sat_429_cooldown_spillover(ctx: Context) -> ScenarioResult:
         if request_c is not None and delta_c is not None:
             assertions.append(
                 AssertionResult(
-                    "C (~9.5s later): err-429 hit again after cooldown expiry, client success",
+                    "C (after cooldown expiry): err-429 hit again, client success",
                     delta_c >= 1 and request_c.success,
                     f"delta={delta_c} status={request_c.status_code}",
                 )
@@ -471,7 +473,7 @@ def scenario_sat_429_cooldown_spillover(ctx: Context) -> ScenarioResult:
         else:
             assertions.append(
                 AssertionResult(
-                    "C (~9.5s later): err-429 hit again after cooldown expiry, client success",
+                    "C (after cooldown expiry): err-429 hit again, client success",
                     False,
                     "request C could not run: no err-429 hit timestamp from request A",
                 )
@@ -483,7 +485,7 @@ def scenario_sat_429_cooldown_spillover(ctx: Context) -> ScenarioResult:
         f"C: delta={delta_c}, client ok={request_c.success if request_c else 'n/a'}; "
         f"total {duration:.2f}s"
     )
-    return _make_result(5, "sat-429-cooldown-spillover", S5_EXPECTED, assertions, tl, journal_b, duration, observed)
+    return _make_result(5, "sat-429-cooldown-spillover", S5_EXPECTED, assertions, tl, journal_final, duration, observed)
 
 
 # ---------------------------------------------------------------------------
@@ -640,11 +642,21 @@ def scenario_err_404_no_retry(ctx: Context) -> ScenarioResult:
         )
     assertions = [
         AssertionResult(
+            "client succeeds via fallback (HTTP 200 with content)",
+            request.success,
+            f"status={request.status_code} content={excerpt(request.content)}",
+        ),
+        AssertionResult(
             "journal: exactly 1 err-404 hit (404 never retried)",
             len(err404) == 1,
             f"err-404 hits={len(err404)} "
             f"outcomes={_outcomes(journal, 'err-404')} "
             f"chunks_sent={_chunks_sent(journal, 'err-404')}",
+        ),
+        AssertionResult(
+            "journal: >= 1 completed healthy hit (fallback rerouted)",
+            len(healthy) >= 1,
+            f"healthy hits={len(healthy)}",
         ),
     ]
     observed = (

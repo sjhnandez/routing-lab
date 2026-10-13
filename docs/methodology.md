@@ -139,8 +139,10 @@ demo-speed runs:
 
 Everything else (routing strategy, `allowed_fails`, `allowed_fails_policy`,
 `retry_after`, the whole `model_list`, all fallback chains) is identical in
-both profiles. S6's cooldown-expiry wait is derived from the active profile's
-`cooldown_time`, so the same scenario code works for both profiles.
+both profiles. The cooldown-expiry waits (S5 and S6) are derived from the
+active profile's `cooldown_time` (+ a 1.5s margin), so the same scenario code
+works for both profiles; full-profile batteries are slow by design (~6 min -
+the two waits are ~122s each).
 
 ## Frozen inputs and integrity rules
 
@@ -161,6 +163,9 @@ both profiles. S6's cooldown-expiry wait is derived from the active profile's
 
 ## Running the battery
 
+    # provenance: record the repo revision in the battery report
+    export LAB_GIT_REV=$(git rev-parse --short HEAD)
+
     # quick profile (default):
     LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env \
       -f deploy/docker-compose.dev.yml up -d --build
@@ -173,7 +178,8 @@ The litellm image is pinned by manifest digest in
 `deploy/pinned-versions.env` (pullable digest; the image tag floats and is
 never used directly). The runner exits 0 iff all 8 scenarios pass; reports land
 in `reports/<run_id>.json`, and `docs/example-report.json` holds a full green
-run.
+run. `LAB_GIT_REV` (a short revision string, e.g. from `git rev-parse --short
+HEAD`) is recorded as `lab.git_rev` in the report.
 
 ## Report schema (abridged)
 

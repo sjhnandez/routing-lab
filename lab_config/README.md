@@ -104,6 +104,9 @@ all fallback chains, and the dummy keys.
 ## Launch (from the repo root)
 
 ```bash
+# provenance (recommended): record the repo revision in the battery report
+export LAB_GIT_REV=$(git rev-parse --short HEAD)
+
 # quick profile (default)
 LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml up -d
 
@@ -117,6 +120,5 @@ LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy
 LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml --profile run run --rm runner
 ```
 
-`mock-upstream` and `runner` are built from `mock_upstream/` and `runner/` (their
-Dockerfiles arrive in later tasks). The litellm image is digest-pinned in
-`deploy/pinned-versions.env`.
+`mock-upstream` and `runner` are built from `mock_upstream/` and `runner/`.
+The litellm image is digest-pinned in `deploy/pinned-versions.env`.

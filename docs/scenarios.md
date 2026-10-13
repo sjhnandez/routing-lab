@@ -14,8 +14,9 @@ Common setup for all scenarios:
   `openai/<mode>`; LiteLLM strips the prefix and the mock injects that mode's
   fault behavior.
 - The journal is reset at scenario start; hit counts below are from the
-  scenario's isolated window. Times are the quick profile; the full battery is
-  ~45s wall clock.
+  scenario's isolated window. Times are the quick profile; the quick battery is
+  ~45s wall clock while the full profile is slow by design (~6 min,
+  profile-derived cooldown waits).
 
 Pool note: the retry-exercised groups (`mode-err-429`, `mode-err-503`,
 `mode-err-500`, `mode-err-404`, `sat-all-failing`, `sat-backup-failing`) are
@@ -37,7 +38,7 @@ error/abort entries in the journal.
   2. `mode-healthy` non-stream: HTTP 200 with content.
   3. Journal: >= 2 `healthy` hits, every entry `completed`.
   4. Duration < 10s.
-- Calibration (quick): healthy x2, ~1.0s. Stable across runs.
+- Calibration (quick): healthy x2, ~1.0-2.0s.
 
 ## S2 - stall-pre-reroute
 
@@ -67,7 +68,7 @@ fallback hit (rerouting after content would double-send).
 - Steps: stream `mode-stall-mid`; fetch journal.
 - Hard assertions:
   1. >= 1 content chunk received before the failure.
-  2. No successful `[DONE]`; error surfaced.
+  2. No successful `[DONE]`; the failure surfaces as an in-band SSE error event.
   3. Journal: `stall-mid` hit(s) `aborted` with `chunks_sent >= 1`.
   4. Journal: no `healthy` hits.
 - Calibration (quick): 3 chunks, then an in-band SSE error event
@@ -101,7 +102,8 @@ pool becomes eligible again after cooldown expiry.
 - Steps:
   A. stream `mode-err-429`;
   B. non-stream `mode-err-429` immediately after (pool in cooldown);
-  C. non-stream after cooldown expiry (~9.5s after the first 429 hit).
+  C. non-stream after cooldown expiry (profile-derived wait:
+     `cooldown_time` + 1.5s; ~9.5s quick, ~121.5s full).
 - Hard assertions:
   1. A: client success via fallback.
   2. A: journal `err-429` hits >= 1 and >= 1 completed `healthy` hit.
@@ -113,7 +115,9 @@ pool becomes eligible again after cooldown expiry.
   still cooling); C delta 2-3 (both members re-eligible; policy-driven retries
   can re-dispatch a second or third time depending on cooldown-registration
   timing). Assertions use >= 1 and stay truthful under both variants.
-  The C wait (9.5s) is calibrated for the quick profile's 8s cooldown.
+  The C wait is derived from the active profile's `cooldown_time` + a 1.5s
+  margin (9.5s quick / 121.5s full), anchored to the last err-429 hit of
+  request A. Full-profile batteries are slow by design (~6 min).
 
 ## S6 - err-5xx-retry-reroute
 
@@ -157,7 +161,9 @@ reroutes.
 - Setup: `mode-err-404` pool -> fallback `healthy-pool`.
 - Steps: non-stream `mode-err-404`; fetch journal.
 - Hard assertions:
-  1. Journal: exactly 1 `err-404` hit (404 never retried).
+  1. Client succeeds via fallback (HTTP 200).
+  2. Journal: exactly 1 `err-404` hit (404 never retried).
+  3. Journal: >= 1 completed `healthy` hit (fallback rerouted).
 - Calibration (quick): 1 hit, fallback success (HTTP 200), ~0.8s total.
 
 ## S8 - sat-all-failing-bounded
