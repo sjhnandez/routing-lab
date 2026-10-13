@@ -5,6 +5,7 @@ const sectionLinks = [
   { href: '#results', label: 'Results' },
   { href: '#history', label: 'History' },
   { href: '#method', label: 'Method' },
+  { href: '#fleet', label: 'Fleet' },
 ]
 
 export function Header() {

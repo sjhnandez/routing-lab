@@ -44,6 +44,7 @@ docker run --rm --user $(id -u):$(id -g) \
 | `GET /api/history` | History table (newest first) |
 | `GET /api/reports/{run_id}` | "View" from history, and the JSON download buttons |
 | `GET /api/docs` | Method section (methodology + scenarios markdown) |
+| `GET /api/fleet` | Fleet section: prober history aggregate (empty state until the prober runs) |
 | `GET /api/health` | Status readout, plus automatic re-enable after blocked states |
 
 ## Scripts

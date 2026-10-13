@@ -124,3 +124,40 @@ export interface LabDocs {
   methodology: string
   scenarios: string
 }
+
+/** One raw probe line from the prober's JSONL history (fields as recorded). */
+export interface FleetProbe {
+  ts: string
+  model?: string
+  ok?: boolean
+  class?: string
+  http_status?: number | null
+  latency_ms?: number
+  error_type?: string | null
+  budget?: { date?: string; count?: number; cap?: number }
+}
+
+/** One row of GET /api/fleet models[]. */
+export interface FleetModel {
+  model: string
+  probes_24h: number
+  ok_24h: number
+  last_class: string
+  last_ts: string
+}
+
+/** GET /api/fleet — read-only aggregate of the prober's JSONL history. */
+export interface FleetSummary {
+  generated_at: string
+  available: boolean
+  note: string | null
+  budget: { date: string; count: number; cap: number }
+  last_24h: {
+    total: number
+    ok: number
+    ok_rate: number
+    counts: Record<string, number>
+  }
+  models: FleetModel[]
+  recent: FleetProbe[]
+}

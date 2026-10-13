@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { MotionConfig } from 'motion/react'
 import { Footer } from './components/Footer'
+import { FleetSection } from './components/FleetSection'
 import { Header } from './components/Header'
 import { HistoryTable } from './components/HistoryTable'
 import { MethodSection } from './components/MethodSection'
@@ -75,6 +76,7 @@ export default function App() {
           />
         </Section>
         <MethodSection />
+        <FleetSection />
       </main>
       <Footer />
     </MotionConfig>

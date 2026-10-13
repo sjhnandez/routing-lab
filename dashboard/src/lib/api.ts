@@ -1,4 +1,5 @@
 import type {
+  FleetSummary,
   HistoryEntry,
   LabDocs,
   LabHealth,
@@ -142,6 +143,11 @@ export function fetchReport(runId: string): Promise<Report> {
 /** GET /api/docs — methodology + scenario markdown. */
 export function fetchDocs(): Promise<LabDocs> {
   return getJson<LabDocs>('/docs')
+}
+
+/** GET /api/fleet — read-only aggregate of the prober's JSONL history. */
+export function fetchFleet(): Promise<FleetSummary> {
+  return getJson<FleetSummary>('/fleet')
 }
 
 /** GET /api/health */

@@ -18,7 +18,7 @@ Prod-like local run:
 - Up: `LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml --profile api up -d --build lab-api`
 - Down: same command with `down` in place of `up -d --build lab-api` (or `--profile api down`)
 
-Endpoints: `POST /api/run`, `GET /api/run/{id}/events` (SSE replay+tail), `GET /api/last-run`, `GET /api/history`, `GET /api/reports/{run_id}`, `GET /api/docs`, `GET /api/health`. `GET /` serves `dashboard/dist` (SPA fallback; plain 503 placeholder until the dashboard is built).
+Endpoints: `POST /api/run`, `GET /api/run/{id}/events` (SSE replay+tail), `GET /api/last-run`, `GET /api/history`, `GET /api/reports/{run_id}`, `GET /api/docs`, `GET /api/health`, `GET /api/fleet`. `GET /` serves `dashboard/dist` (SPA fallback; plain 503 placeholder until the dashboard is built). `GET /api/fleet` aggregates the prober's JSONL history, mounted read-only from `prober/history` at `/app/prober-history` (`LAB_PROBER_HISTORY_DIR`); it reports `available:false` + an empty state until the host-side prober has run.
 
 Gates on `POST /api/run`: one run at a time (`429 run_in_progress`), 120 s cooldown since the newest run (`429 cooldown`), 1 accepted request / 10 min / IP via `CF-Connecting-IP` (`429 rate_limited`, falls back to the socket peer).
 

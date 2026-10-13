@@ -11,6 +11,8 @@ Endpoints (frozen contract, consumed by dashboard/):
                             ``done``/``error``
   GET  /api/last-run        {"report": <full report JSON>|null}
   GET  /api/history         [{run_id,profile,started_at,duration_s,summary}]
+  GET  /api/fleet           prober history aggregate: {generated_at,available,note,
+                            budget,last_24h,models,recent} (read-only, no probing)
   GET  /api/reports/{id}    full report JSON
   GET  /api/docs            {"methodology","scenarios"} markdown strings
   GET  /api/health          {"status","trigger_enabled","queue":{...}}
@@ -52,6 +54,8 @@ from fastapi.responses import (
 # ids are ever joined onto a directory path (no traversal, no surprises).
 RUN_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 REPORT_ID_RE = re.compile(r"^[0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9-]{0,31}$")
+# Prober history files (one per UTC day, written host-side by ``prober/``).
+PROBE_FILE_RE = re.compile(r"^probes-[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl$")
 
 ACTIVE_STATUSES = ("pending", "running")
 TERMINAL_STATUSES = ("done", "failed")
@@ -60,6 +64,22 @@ TERMINAL_STAGES = ("done", "error")
 NOT_BUILT_PLACEHOLDER = (
     "routing-lab dashboard is not built yet (dashboard/dist is empty)\n"
 )
+
+# Mirrors ``prober.classify.CLASSES`` (the prober package is not importable
+# from the ``lab-api`` image) so /api/fleet counts keep a stable shape.
+FLEET_CLASSES: tuple[str, ...] = (
+    "ok",
+    "rate_limited",
+    "unavailable",
+    "timeout",
+    "not_found",
+    "auth",
+    "other_4xx",
+    "network",
+)
+FLEET_RECENT_LIMIT = 50
+FLEET_DEFAULT_CAP = 48
+FLEET_EMPTY_NOTE = "prober has not run yet"
 
 _FALSY = {"off", "0", "false", "no"}
 
@@ -91,6 +111,7 @@ class Config:
     reports_dir: Path
     docs_dir: Path
     static_dir: Path
+    prober_history_dir: Path = Path("/app/prober-history")
     trigger_enabled: bool = True
     cooldown_s: float = 120.0
     rate_limit_window_s: float = 600.0
@@ -104,6 +125,9 @@ class Config:
             reports_dir=Path(os.environ.get("LAB_REPORTS_DIR", "/app/reports")),
             docs_dir=Path(os.environ.get("LAB_DOCS_DIR", "/app/docs")),
             static_dir=Path(os.environ.get("LAB_STATIC_DIR", "/app/static")),
+            prober_history_dir=Path(
+                os.environ.get("LAB_PROBER_HISTORY_DIR", "/app/prober-history")
+            ),
             trigger_enabled=_env_flag("LAB_TRIGGER", default=True),
             cooldown_s=_env_float("LAB_COOLDOWN_S", 120.0),
             rate_limit_window_s=_env_float("LAB_RATE_LIMIT_WINDOW_S", 600.0),
@@ -335,6 +359,147 @@ def _is_within(path: Path, root: Path) -> bool:
     return True
 
 
+def _utc_date(moment: dt.datetime) -> str:
+    return _iso_z(moment)[:10]
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    if isinstance(value, bool):
+        return None
+    return value if isinstance(value, int) else None
+
+
+def _probe_history_files(history_dir: Path) -> list[Path]:
+    """Newest-first ``probes-YYYY-MM-DD.jsonl`` files (names sort by date)."""
+    try:
+        paths = [
+            path
+            for path in history_dir.glob("probes-*.jsonl")
+            if PROBE_FILE_RE.fullmatch(path.name) and path.is_file()
+        ]
+    except OSError:
+        return []
+    return sorted(paths, key=lambda p: p.name, reverse=True)
+
+
+def _read_probe_entries(history_dir: Path) -> list[dict]:
+    """Valid probe lines from the newest two daily files, oldest first.
+
+    Malformed lines are skipped: invalid JSON, non-objects, blank lines and
+    objects without a parseable ISO-8601 ``ts``. The prober appends
+    chronologically, so file order is time order.
+    """
+    entries: list[dict] = []
+    for path in reversed(_probe_history_files(history_dir)[:2]):
+        for line in _read_text(path).splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict):
+                continue
+            if _parse_iso_z(entry.get("ts")) is None:
+                continue
+            entries.append(entry)
+    return entries
+
+
+def _fleet_payload(cfg: Config, now: dt.datetime) -> dict[str, Any]:
+    """Aggregate the prober's JSONL history for ``GET /api/fleet``.
+
+    Read-only over the newest two ``probes-*.jsonl`` files; never probes and
+    never writes. ``available`` reflects whether any history parsed at all,
+    while ``last_24h`` is a rolling window (an all-stale history still reports
+    its budget, per-model last class and recent lines).
+    """
+    entries = _read_probe_entries(cfg.prober_history_dir)
+    available = bool(entries)
+    start = now - dt.timedelta(hours=24)
+
+    budget: dict[str, Any] = {
+        "date": _utc_date(now),
+        "count": 0,
+        "cap": FLEET_DEFAULT_CAP,
+    }
+    if entries:
+        latest = entries[-1]
+        recorded = latest.get("budget")
+        recorded = recorded if isinstance(recorded, dict) else {}
+        latest_ts = _parse_iso_z(latest.get("ts"))
+        date = recorded.get("date")
+        if not (isinstance(date, str) and date):
+            date = _utc_date(latest_ts) if latest_ts is not None else budget["date"]
+        count = _int_or_none(recorded.get("count"))
+        if count is None or count < 0:
+            count = 0
+            for entry in entries:
+                entry_ts = _parse_iso_z(entry.get("ts"))
+                if entry_ts is not None and _utc_date(entry_ts) == date:
+                    count += 1
+        cap = _int_or_none(recorded.get("cap"))
+        budget = {
+            "date": date,
+            "count": count,
+            "cap": cap if cap is not None and cap > 0 else FLEET_DEFAULT_CAP,
+        }
+
+    counts = {name: 0 for name in FLEET_CLASSES}
+    total = 0
+    ok = 0
+    models: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        entry_ts = _parse_iso_z(entry.get("ts"))
+        if entry_ts is None:  # unreachable (filtered above), kept for safety
+            continue
+        in_window = start <= entry_ts <= now
+        cls_raw = entry.get("class")
+        cls = cls_raw if isinstance(cls_raw, str) and cls_raw else None
+        if in_window and cls is not None:
+            counts[cls] = counts.get(cls, 0) + 1
+            total += 1
+            if cls == "ok":
+                ok += 1
+        model = entry.get("model")
+        if isinstance(model, str) and model.strip():
+            row = models.setdefault(
+                model,
+                {
+                    "model": model,
+                    "probes_24h": 0,
+                    "ok_24h": 0,
+                    "last_class": "",
+                    "last_ts": "",
+                },
+            )
+            if in_window:
+                row["probes_24h"] += 1
+                if cls == "ok":
+                    row["ok_24h"] += 1
+            if cls is not None:
+                row["last_class"] = cls
+                row["last_ts"] = str(entry.get("ts"))
+
+    return {
+        "generated_at": _iso_z(now),
+        "available": available,
+        "note": None if available else FLEET_EMPTY_NOTE,
+        "budget": budget,
+        "last_24h": {
+            "total": total,
+            "ok": ok,
+            "ok_rate": (ok / total) if total else 0.0,
+            "counts": counts,
+        },
+        "models": sorted(
+            models.values(), key=lambda row: (-row["probes_24h"], row["model"])
+        ),
+        "recent": list(reversed(entries[-FLEET_RECENT_LIMIT:])),
+    }
+
+
 def create_app(config: Optional[Config] = None) -> FastAPI:
     cfg = config or Config.from_env()
     app = FastAPI(title="routing-lab lab-api", version="0.1.0")
@@ -448,6 +613,10 @@ def create_app(config: Optional[Config] = None) -> FastAPI:
                 "running": sum(1 for e in entries if e.status == "running"),
             },
         }
+
+    @app.get("/api/fleet")
+    async def fleet() -> dict[str, Any]:
+        return _fleet_payload(cfg, _utcnow())
 
     # Dashboard bundle at "/" with SPA fallback; registered last so every
     # /api/* route above wins. Unknown /api/* paths get a JSON 404.

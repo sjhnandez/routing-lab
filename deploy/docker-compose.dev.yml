@@ -46,7 +46,9 @@ services:
 
   # Dashboard backend: run trigger + queue/report/docs API. Localhost-only
   # (127.0.0.1:3003). Deliberately has no docker.sock: POST /api/run drops a
-  # request into queue/ and the host-side deploy/executor.sh runs it.
+  # request into queue/ and the host-side deploy/executor.sh runs it. The
+  # prober's JSONL history is mounted read-only for GET /api/fleet (which
+  # reports an empty state until the host-side prober has run).
   # Start: LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml --profile api up -d --build lab-api
   lab-api:
     profiles: ["api"]
@@ -58,6 +60,8 @@ services:
       - ../reports:/app/reports:ro
       - ../queue:/app/queue
       - ../docs:/app/docs:ro
+      - ../prober/history:/app/prober-history:ro
     environment:
       - LAB_TRIGGER=${LAB_TRIGGER:-on}
+      - LAB_PROBER_HISTORY_DIR=/app/prober-history
     restart: "no"
