@@ -1,0 +1,8 @@
+# Test-only dependencies, pinned. Runtime pins are aligned with
+# mock_upstream/requirements.txt (fastapi, uvicorn) and runner/requirements.txt
+# (httpx, PyYAML) so the suite exercises the same versions as the lab images.
+pytest==8.4.2
+fastapi==0.143.0
+uvicorn==0.54.0
+httpx==0.28.1
+PyYAML==6.0.3
