@@ -1,0 +1,171 @@
+# routing-lab FULL-profile LiteLLM proxy config (production values).
+#
+# router_settings below is the frozen contract (lab_config/litellm.config.yaml,
+# itself copied verbatim from production apps/litellm/config.yaml) reproduced
+# verbatim, with only its fallbacks: list extended with the lab model groups.
+#
+# All deployments point at the mock upstream: litellm_params.model is
+# "openai/<mode>", so after LiteLLM strips the "openai/" prefix the mock
+# receives "model": "<mode>" and injects that mode's fault behavior.
+# <mode> is one of: healthy, stall-pre, stall-mid, slow-steady, err-429,
+# err-503, err-500, err-404.
+
+model_list:
+  # --- One deterministic single-deployment group per fault mode. ---
+  - model_name: mode-healthy
+    litellm_params:
+      model: openai/healthy
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-stall-pre
+    litellm_params:
+      model: openai/stall-pre
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-stall-mid
+    litellm_params:
+      model: openai/stall-mid
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-slow-steady
+    litellm_params:
+      model: openai/slow-steady
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-err-429
+    litellm_params:
+      model: openai/err-429
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-err-503
+    litellm_params:
+      model: openai/err-503
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-err-500
+    litellm_params:
+      model: openai/err-500
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: mode-err-404
+    litellm_params:
+      model: openai/err-404
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  # --- healthy-pool: two distinct deployments so one can cool down alone. ---
+  - model_name: healthy-pool
+    litellm_params:
+      model: openai/healthy
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: healthy-pool-a
+
+  - model_name: healthy-pool
+    litellm_params:
+      model: openai/healthy
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: healthy-pool-b
+
+  # --- Saturation groups: only failing deployments, chained to each other. ---
+  - model_name: sat-all-failing
+    litellm_params:
+      model: openai/err-503
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  - model_name: sat-backup-failing
+    litellm_params:
+      model: openai/err-429
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+
+  # --- Production-shape aliases (text/vision tiers + complexity-router entry). ---
+  - model_name: text-chat
+    litellm_params:
+      model: openai/healthy
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      supports_vision: false
+
+  - model_name: vision-chat
+    litellm_params:
+      model: openai/healthy
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      supports_vision: true
+
+  - model_name: free-chat
+    litellm_params:
+      model: auto_router/complexity_router
+      complexity_router_config:
+        tiers:
+          SIMPLE: text-chat
+          MEDIUM: text-chat
+          COMPLEX: text-chat
+          REASONING: vision-chat
+        default_model: vision-chat
+        modality_routing: true
+        modality_pin_override: true
+
+router_settings:
+  routing_strategy: "simple-shuffle"    # Distribute requests across free deployments
+  num_retries: 5                        # Up to 5 retries to find an available endpoint
+  cooldown_time: 120                    # Cool down an unavailable/rate-limited endpoint for 2 mins
+  allowed_fails: 0                      # Immediately cool down on first failure
+  retry_after: 1                        # Wait 1s before switching to the next deployment
+  # Kill hung requests fast, then retry/reroute (verified with a stalling fake
+  # upstream: stream kills reroute when no content was sent yet; non-stream
+  # kills retry and reroute. A steady stream is never killed - this is a
+  # SILENCE gap limit, not a total-duration cap, so long answers are safe).
+  timeout: 20                           # Non-stream: kill after 20s with no response
+  stream_timeout: 20                    # Stream: kill after 20s of silence (no chunks)
+  allowed_fails_policy:
+    RateLimitErrorAllowedFails: 0          # HTTP 429
+    ServiceUnavailableErrorAllowedFails: 0  # HTTP 503 (high demand / capacity spikes)
+    InternalServerErrorAllowedFails: 0     # HTTP 500 / 502 / 504
+    BadGatewayErrorAllowedFails: 0         # HTTP 502
+    TimeoutErrorAllowedFails: 0            # HTTP 408 / request timeouts
+  retry_policy:
+    RateLimitErrorRetries: 5
+    InternalServerErrorRetries: 5
+    TimeoutErrorRetries: 3
+  # Reroute recoverable failures to a sibling pool instead of surfacing them.
+  # This is what catches streaming errors that arrive BEFORE the first content
+  # chunk (e.g. OpenRouter "provider_unavailable" arriving mid-stream) - without
+  # a fallback chain litellm returns the raw provider error to the client.
+  # Lookup order for the complexity-router alias is: the tier the router picked
+  # (text-chat / vision-chat) first, then the alias name (free-chat).
+  fallbacks:
+    - mode-healthy: ["healthy-pool"]
+    - mode-stall-pre: ["healthy-pool"]
+    - mode-stall-mid: ["healthy-pool"]
+    - mode-slow-steady: ["healthy-pool"]
+    - mode-err-429: ["healthy-pool"]
+    - mode-err-503: ["healthy-pool"]
+    - mode-err-500: ["healthy-pool"]
+    - mode-err-404: ["healthy-pool"]
+    - sat-all-failing: ["sat-backup-failing"]
+    - sat-backup-failing: ["sat-all-failing"]
+    - text-chat: ["vision-chat"]
+    - vision-chat: ["text-chat"]
+    - free-chat: ["text-chat", "vision-chat"]
+
+general_settings:
+  master_key: sk-lab-master-dummy
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false

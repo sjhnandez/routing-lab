@@ -1,0 +1,35 @@
+# routing-lab dev stack: mock-upstream + litellm-lab + runner (profile "run").
+# All services are internal-only (no host ports); they share the default network.
+# Run from the repo root:
+#   up (quick):  LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml up -d
+#   up (full):   LAB_PROFILE=full  docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml up -d
+#   down:        LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml down
+#   battery:     LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml --profile run run --rm runner
+
+name: routing-lab-dev
+
+services:
+  # Deterministic OpenAI-compatible mock upstream; Dockerfile arrives in a later task.
+  mock-upstream:
+    build: ../mock_upstream
+    restart: "no"
+
+  # LiteLLM proxy under test; config picked by LAB_PROFILE (quick is the default).
+  litellm-lab:
+    image: ${LITELLM_IMAGE}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ../lab_config/router.${LAB_PROFILE:-quick}.yaml:/app/config.yaml:ro
+    depends_on:
+      - mock-upstream
+    restart: "no"
+
+  # Scenario battery; run only via: docker compose --profile run run --rm runner.
+  runner:
+    profiles: ["run"]
+    build: ../runner
+    environment:
+      - LAB_BASE_URL=http://litellm-lab:4000
+    depends_on:
+      - litellm-lab
+    restart: "no"
