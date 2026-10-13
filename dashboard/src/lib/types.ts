@@ -149,3 +149,37 @@ export interface FleetSummary {
   models: FleetModel[]
   recent: FleetProbe[]
 }
+
+/**
+ * POST /api/chat contract. Success streams OpenAI-style `data:` chunks
+ * (delta fields `content` and/or `reasoning_content`), then `data: [DONE]`
+ * and one terminal `event: meta` frame with the router's attribution;
+ * upstream failures surface as a single in-stream `event: error` frame.
+ * Gate rejections arrive as JSON bodies before the stream starts.
+ */
+
+/** Rejection reasons of POST /api/chat (JSON bodies, never in the SSE stream). */
+export type ChatRejectionReason =
+  | 'message_empty'
+  | 'message_too_long'
+  | 'rate_limited'
+  | 'busy'
+  | 'chat_disabled'
+  | 'router_key_missing'
+
+export interface ChatRejectionBody {
+  reason: ChatRejectionReason
+  retry_after_s?: number
+}
+
+/** Reasons of an in-stream `event: error` frame. */
+export type ChatStreamErrorReason = 'pools_busy' | 'router_error' | 'router_timeout'
+
+/** Terminal `event: meta` frame: which deployment served the reply. */
+export interface ChatMeta {
+  served_by: string | null
+  model_id: string | null
+  attempted_retries: number | null
+  attempted_fallbacks: number | null
+  latency_ms: number | null
+}

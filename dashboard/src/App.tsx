@@ -1,5 +1,6 @@
 import { MotionConfig } from 'motion/react'
 import { useCallback } from 'react'
+import { ChatSection } from './components/ChatSection'
 import { FleetSection } from './components/FleetSection'
 import { Footer } from './components/Footer'
 import { Header } from './components/Header'
@@ -50,6 +51,7 @@ export default function App() {
       <Header />
       <main id="main">
         <OverviewSection />
+        <ChatSection />
         <RunPanel
           phase={run.phase}
           cooldownRemainingS={run.cooldownRemainingS}

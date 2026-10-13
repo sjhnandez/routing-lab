@@ -3,6 +3,7 @@ import { GitHubIcon } from './Icons'
 
 const sectionLinks = [
   { href: '#overview', label: 'Overview' },
+  { href: '#chat', label: 'Try it' },
   { href: '#results', label: 'Results' },
   { href: '#history', label: 'History' },
   { href: '#method', label: 'Method' },

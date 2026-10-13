@@ -31,7 +31,7 @@ One bullet per verified finding; quoted fragments are from real runs (full catal
 
 *Mid-run: the stages panel streaming scenario results over SSE while the battery executes on the host.*
 
-Both screenshots are captured by the browser E2E (`tests/e2e/dashboard_e2e.py`) on a real run against the full local stack. There is no hosted demo: the dashboard is served by `lab-api` on `127.0.0.1:3003`, and battery runs execute where Docker is available. A public deployment (tunnel plus always-on executor) is future work, not part of this repository yet.
+Both screenshots are captured by the browser E2E (`tests/e2e/dashboard_e2e.py`) on a real run against the full local stack. The dashboard is live at [lab.superseb.xyz](https://lab.superseb.xyz) and also runs locally on `127.0.0.1:3003` when following Quick start. Its "Try the router" chat sends messages through the real gateway and shows which deployment served each reply.
 
 ## Architecture
 

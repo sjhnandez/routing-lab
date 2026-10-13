@@ -1,4 +1,8 @@
 import type {
+    ChatMeta,
+    ChatRejectionBody,
+    ChatRejectionReason,
+    ChatStreamErrorReason,
     FleetSummary,
     HistoryEntry,
     LabDocs,
@@ -158,4 +162,198 @@ export function fetchHealth(): Promise<LabHealth> {
 /** Download URL for the JSON download buttons. */
 export function reportDownloadUrl(runId: string): string {
   return `${API_BASE}/reports/${encodeURIComponent(runId)}`
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/chat — "Try the router" streaming chat (see lib/types.ts for the
+// contract). Gate rejections throw before the stream; everything after that
+// arrives as `ChatStreamEvent`s from the SSE parse.
+// ---------------------------------------------------------------------------
+
+/** POST /api/chat gate rejection (400/429/503 JSON body). */
+export class ChatRejectedError extends Error {
+  readonly reason: ChatRejectionReason
+  readonly retryAfterS: number | undefined
+
+  constructor(body: ChatRejectionBody) {
+    super(`chat rejected: ${body.reason}`)
+    this.name = 'ChatRejectedError'
+    this.reason = body.reason
+    this.retryAfterS = body.retry_after_s
+  }
+}
+
+/** One parsed event of the POST /api/chat SSE stream. */
+export type ChatStreamEvent =
+  | { type: 'delta'; content: string | null; reasoning: string | null }
+  | { type: 'done' }
+  | { type: 'meta'; meta: ChatMeta }
+  | { type: 'error'; reason: ChatStreamErrorReason; status: number | null }
+
+const CHAT_REJECTION_REASONS: readonly string[] = [
+  'message_empty',
+  'message_too_long',
+  'rate_limited',
+  'busy',
+  'chat_disabled',
+  'router_key_missing',
+]
+
+const CHAT_STREAM_ERROR_REASONS: readonly string[] = [
+  'pools_busy',
+  'router_error',
+  'router_timeout',
+]
+
+/** One raw SSE frame: optional `event:` name plus the joined `data:` lines. */
+interface SseFrame {
+  event: string
+  data: string
+}
+
+/** Parse one raw SSE frame block; returns null when it carries no data. */
+function parseSseFrame(raw: string): SseFrame | null {
+  let event = 'message'
+  const dataLines: string[] = []
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) {
+      event = line.slice('event:'.length).trim()
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).replace(/^ /, ''))
+    }
+  }
+  if (dataLines.length === 0) return null
+  return { event, data: dataLines.join('\n') }
+}
+
+/** OpenAI chat.completion.chunk → the delta fields the chat UI renders. */
+function parseChatDelta(data: string): { content: string | null; reasoning: string | null } | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(data)
+  } catch {
+    return null
+  }
+  const record = asRecord(parsed)
+  const choices = record?.choices
+  if (!Array.isArray(choices) || choices.length === 0) return null
+  const choice = asRecord(choices[0])
+  const delta = choice ? asRecord(choice.delta) : null
+  if (!delta) return null
+  const content = typeof delta.content === 'string' && delta.content !== '' ? delta.content : null
+  const reasoning =
+    typeof delta.reasoning_content === 'string' && delta.reasoning_content !== ''
+      ? delta.reasoning_content
+      : null
+  if (content === null && reasoning === null) return null
+  return { content, reasoning }
+}
+
+/** Parse an `event: meta` frame; returns null for malformed payloads. */
+function parseChatMeta(data: string): ChatMeta | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(data)
+  } catch {
+    return null
+  }
+  const record = asRecord(parsed)
+  if (!record) return null
+  const str = (value: unknown) => (typeof value === 'string' ? value : null)
+  const num = (value: unknown) =>
+    typeof value === 'number' && Number.isFinite(value) ? value : null
+  return {
+    served_by: str(record.served_by),
+    model_id: str(record.model_id),
+    attempted_retries: num(record.attempted_retries),
+    attempted_fallbacks: num(record.attempted_fallbacks),
+    latency_ms: num(record.latency_ms),
+  }
+}
+
+/**
+ * POST /api/chat and consume the SSE reply, invoking `onEvent` per parsed
+ * frame. Resolves when the stream ends (cleanly or with an in-stream error
+ * frame); gate rejections throw ChatRejectedError and transport failures
+ * throw ApiError before any event is emitted.
+ */
+export async function streamChat(
+  message: string,
+  onEvent: (event: ChatStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
+    body: JSON.stringify({ message }),
+    signal,
+  })
+  if (!res.ok) {
+    let body: Record<string, unknown> | null = null
+    try {
+      body = asRecord(await res.json())
+    } catch {
+      body = null
+    }
+    const reason = body?.reason
+    if (
+      (res.status === 400 || res.status === 429 || res.status === 503) &&
+      typeof reason === 'string' &&
+      CHAT_REJECTION_REASONS.includes(reason)
+    ) {
+      const rejection: ChatRejectionBody = { reason: reason as ChatRejectionReason }
+      const retryAfter = body?.retry_after_s
+      if (typeof retryAfter === 'number') rejection.retry_after_s = retryAfter
+      throw new ChatRejectedError(rejection)
+    }
+    throw new ApiError(`POST /chat failed with HTTP ${res.status}`, res.status)
+  }
+  if (!res.body) throw new ApiError('POST /chat returned no body', res.status)
+
+  const emitFrame = (frame: SseFrame) => {
+    if (frame.event === 'meta') {
+      const meta = parseChatMeta(frame.data)
+      if (meta) onEvent({ type: 'meta', meta })
+      return
+    }
+    if (frame.event === 'error') {
+      let reason: ChatStreamErrorReason = 'router_error'
+      let status: number | null = null
+      try {
+        const record = asRecord(JSON.parse(frame.data))
+        const rawReason = record?.reason
+        if (typeof rawReason === 'string' && CHAT_STREAM_ERROR_REASONS.includes(rawReason)) {
+          reason = rawReason as ChatStreamErrorReason
+        }
+        if (typeof record?.status === 'number') status = record.status
+      } catch {
+        // keep the conservative defaults
+      }
+      onEvent({ type: 'error', reason, status })
+      return
+    }
+    if (frame.data.trim() === '[DONE]') {
+      onEvent({ type: 'done' })
+      return
+    }
+    const delta = parseChatDelta(frame.data)
+    if (delta) onEvent({ type: 'delta', content: delta.content, reasoning: delta.reasoning })
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let index = buffer.indexOf('\n\n')
+    while (index !== -1) {
+      const raw = buffer.slice(0, index)
+      buffer = buffer.slice(index + 2)
+      const frame = parseSseFrame(raw)
+      if (frame) emitFrame(frame)
+      index = buffer.indexOf('\n\n')
+    }
+  }
 }

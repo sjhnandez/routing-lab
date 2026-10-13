@@ -34,6 +34,9 @@ services:
       - LAB_TRIGGER=${LAB_TRIGGER:-on}
       - LAB_CHAT=${LAB_CHAT:-on}
       - LAB_PROBER_HISTORY_DIR=/app/prober-history
+      # free reasoning models need headroom: reasoning tokens count toward
+      # the cap before any visible content is emitted.
+      - LAB_CHAT_MAX_TOKENS=${LAB_CHAT_MAX_TOKENS:-500}
     deploy:
       resources:
         limits:
