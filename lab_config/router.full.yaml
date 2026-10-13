@@ -11,7 +11,10 @@
 # err-503, err-500, err-404.
 
 model_list:
-  # --- One deterministic single-deployment group per fault mode. ---
+  # --- Fault-mode groups. Baseline/stall/slow scenarios test reroute and
+  # gap-survival, so those groups stay single-deployment. The retry-exercised
+  # error modes are 2-deployment pools (prod-like): a retry only reaches the
+  # upstream while a healthy sibling deployment remains (see README). ---
   - model_name: mode-healthy
     litellm_params:
       model: openai/healthy
@@ -36,29 +39,70 @@ model_list:
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
 
+  # --- Retry-exercised error modes: 2-deployment pools (ids -a/-b). ---
   - model_name: mode-err-429
     litellm_params:
       model: openai/err-429
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-429-a
+
+  - model_name: mode-err-429
+    litellm_params:
+      model: openai/err-429
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-429-b
 
   - model_name: mode-err-503
     litellm_params:
       model: openai/err-503
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-503-a
+
+  - model_name: mode-err-503
+    litellm_params:
+      model: openai/err-503
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-503-b
 
   - model_name: mode-err-500
     litellm_params:
       model: openai/err-500
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-500-a
+
+  - model_name: mode-err-500
+    litellm_params:
+      model: openai/err-500
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-500-b
 
   - model_name: mode-err-404
     litellm_params:
       model: openai/err-404
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-404-a
+
+  - model_name: mode-err-404
+    litellm_params:
+      model: openai/err-404
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: mode-err-404-b
 
   # --- healthy-pool: two distinct deployments so one can cool down alone. ---
   - model_name: healthy-pool
@@ -77,18 +121,40 @@ model_list:
     model_info:
       id: healthy-pool-b
 
-  # --- Saturation groups: only failing deployments, chained to each other. ---
+  # --- Saturation groups: only failing deployments, chained to each other;
+  # 2-deployment pools so intra-group retries are observable before total
+  # exhaustion. ---
   - model_name: sat-all-failing
     litellm_params:
       model: openai/err-503
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: sat-all-failing-a
+
+  - model_name: sat-all-failing
+    litellm_params:
+      model: openai/err-503
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: sat-all-failing-b
 
   - model_name: sat-backup-failing
     litellm_params:
       model: openai/err-429
       api_base: "http://mock-upstream:8000/v1"
       api_key: "sk-mock-dummy"
+    model_info:
+      id: sat-backup-failing-a
+
+  - model_name: sat-backup-failing
+    litellm_params:
+      model: openai/err-429
+      api_base: "http://mock-upstream:8000/v1"
+      api_key: "sk-mock-dummy"
+    model_info:
+      id: sat-backup-failing-b
 
   # --- Production-shape aliases (text/vision tiers + complexity-router entry). ---
   - model_name: text-chat

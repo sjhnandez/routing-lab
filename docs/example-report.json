@@ -1,0 +1,1147 @@
+{
+  "run_id": "20261013-080105-quick",
+  "profile": "quick",
+  "started_at": "2026-10-13T08:01:05Z",
+  "finished_at": "2026-10-13T08:02:05Z",
+  "duration_s": 60.431,
+  "lab": {
+    "base_url": "http://litellm-lab:4000",
+    "mock_url": "http://mock-upstream:8000",
+    "litellm_image": "ghcr.io/berriai/litellm@sha256:67831417c1415ec704b62b1fd75fa5efecd9b3dcec0ad15450e8e5ce4a3333e6",
+    "git_rev": null
+  },
+  "config_snapshot": {
+    "source": "lab_config/router.quick.yaml",
+    "router_settings": {
+      "routing_strategy": "simple-shuffle",
+      "num_retries": 2,
+      "cooldown_time": 8,
+      "allowed_fails": 0,
+      "retry_after": 1,
+      "timeout": 3,
+      "stream_timeout": 3,
+      "allowed_fails_policy": {
+        "RateLimitErrorAllowedFails": 0,
+        "ServiceUnavailableErrorAllowedFails": 0,
+        "InternalServerErrorAllowedFails": 0,
+        "BadGatewayErrorAllowedFails": 0,
+        "TimeoutErrorAllowedFails": 0
+      },
+      "retry_policy": {
+        "RateLimitErrorRetries": 2,
+        "InternalServerErrorRetries": 2,
+        "TimeoutErrorRetries": 2
+      },
+      "fallbacks": [
+        {
+          "mode-healthy": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-stall-pre": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-stall-mid": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-slow-steady": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-err-429": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-err-503": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-err-500": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "mode-err-404": [
+            "healthy-pool"
+          ]
+        },
+        {
+          "sat-all-failing": [
+            "sat-backup-failing"
+          ]
+        },
+        {
+          "sat-backup-failing": [
+            "sat-all-failing"
+          ]
+        },
+        {
+          "text-chat": [
+            "vision-chat"
+          ]
+        },
+        {
+          "vision-chat": [
+            "text-chat"
+          ]
+        },
+        {
+          "free-chat": [
+            "text-chat",
+            "vision-chat"
+          ]
+        }
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": 1,
+      "name": "healthy-baseline",
+      "status": "pass",
+      "duration_s": 1.906,
+      "expected": "free-chat (complexity router) streams a clean completion; mode-healthy non-stream returns HTTP 200; every journaled hit is completed",
+      "observed": "free-chat: HTTP 200, 5 chunks, done=True; mode-healthy: HTTP 200; journal: healthy x2; total 1.91s",
+      "assertions": [
+        {
+          "desc": "free-chat stream completes with [DONE] and non-empty content",
+          "pass": true,
+          "detail": "status=200 done=True chunks=5 content_len=29"
+        },
+        {
+          "desc": "mode-healthy non-stream returns HTTP 200 with content",
+          "pass": true,
+          "detail": "status=200 content=Hello from the mock upstream!"
+        },
+        {
+          "desc": "journal: >= 2 healthy hits, every entry completed (no errored/aborted)",
+          "pass": true,
+          "detail": "entries=2 (healthy x2) non_completed=0"
+        },
+        {
+          "desc": "scenario duration < 10s",
+          "pass": true,
+          "detail": "duration=1.91s"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.002,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 1.026,
+          "event": "router_headers",
+          "detail": "free-chat: attempted_retries=0, attempted_fallbacks=0"
+        },
+        {
+          "t": 1.026,
+          "event": "http_status",
+          "detail": "free-chat: HTTP 200"
+        },
+        {
+          "t": 1.027,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 1.138,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 1.139,
+          "event": "stream_end",
+          "detail": "done=True chunks=5 error_event=none"
+        },
+        {
+          "t": 1.154,
+          "event": "router_headers",
+          "detail": "mode-healthy: attempted_retries=0, attempted_fallbacks=0"
+        },
+        {
+          "t": 1.154,
+          "event": "http_status",
+          "detail": "mode-healthy: HTTP 200"
+        },
+        {
+          "t": 1.154,
+          "event": "completion",
+          "detail": "Hello from the mock upstream!"
+        },
+        {
+          "t": 1.906,
+          "event": "journal_fetched",
+          "detail": "2 entries after 0.75s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "healthy",
+          "hits": 2
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878480.5577173,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 5,
+          "outcome": "completed",
+          "duration_s": 0.262699
+        },
+        {
+          "ts": 1791878480.849203,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": false,
+          "status": 200,
+          "chunks_sent": 1,
+          "outcome": "completed",
+          "duration_s": 5.8e-05
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "stall-pre-reroute",
+      "status": "pass",
+      "duration_s": 4.043,
+      "expected": "stall before first chunk -> stream silence kill -> reroute via fallbacks; client sees a complete success and the journal attributes the abort to stall-pre and the completion to a healthy deployment",
+      "observed": "client success via fallback: done=True, 5 chunks; stall-pre aborted x1 (chunks_sent=0); healthy completed x1; total 4.04s",
+      "assertions": [
+        {
+          "desc": "client gets a complete success via fallback (no error surfaced)",
+          "pass": true,
+          "detail": "status=200 done=True chunks=5 error=none"
+        },
+        {
+          "desc": "journal: stall-pre hit(s) aborted with chunks_sent == 0",
+          "pass": true,
+          "detail": "stall-pre hits=1 outcomes=['aborted'] chunks_sent=[0]"
+        },
+        {
+          "desc": "journal: healthy hit(s) completed (fallback attribution)",
+          "pass": true,
+          "detail": "healthy completed=1"
+        },
+        {
+          "desc": "scenario duration < 30s",
+          "pass": true,
+          "detail": "duration=4.04s"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 3.035,
+          "event": "router_headers",
+          "detail": "mode-stall-pre: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 3.035,
+          "event": "http_status",
+          "detail": "mode-stall-pre: HTTP 200"
+        },
+        {
+          "t": 3.035,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 3.291,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 3.291,
+          "event": "stream_end",
+          "detail": "done=True chunks=5 error_event=none"
+        },
+        {
+          "t": 4.043,
+          "event": "journal_fetched",
+          "detail": "2 entries after 0.75s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "stall-pre",
+          "hits": 1
+        },
+        {
+          "mode": "healthy",
+          "hits": 1
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878481.6159394,
+          "model": "stall-pre",
+          "mode": "stall-pre",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 0,
+          "outcome": "aborted",
+          "duration_s": 3.017308
+        },
+        {
+          "ts": 1791878484.6402066,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 5,
+          "outcome": "completed",
+          "duration_s": 0.254158
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "stall-mid-surface-error",
+      "status": "pass",
+      "duration_s": 3.821,
+      "expected": "stall after content started -> litellm cannot un-send chunks: the turn fails for the client and there is no healthy fallback hit",
+      "observed": "client: 3 chunks then SSE error event: 500: litellm.APIConnectionError: APIConnectionError: OpenAIException - Timeout on reading data from socket; stall-mid aborted x1 (chunks_sent=[3]); healthy x0; total 3.82s",
+      "assertions": [
+        {
+          "desc": "client receives >= 1 content chunk before the failure",
+          "pass": true,
+          "detail": "content_chunks=3 content_len=19"
+        },
+        {
+          "desc": "turn fails: no successful [DONE] completion, error surfaced",
+          "pass": true,
+          "detail": "manifestation=SSE error event: 500: litellm.APIConnectionError: APIConnectionError: OpenAIException - Timeout on reading data from socket; done=False; status=200"
+        },
+        {
+          "desc": "journal: stall-mid hit(s) aborted with chunks_sent >= 1",
+          "pass": true,
+          "detail": "stall-mid hits=1 outcomes=['aborted'] chunks_sent=[3]"
+        },
+        {
+          "desc": "journal: no healthy hits (fallback impossible after content)",
+          "pass": true,
+          "detail": "healthy hits=0"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 0.01,
+          "event": "router_headers",
+          "detail": "mode-stall-mid: attempted_retries=0, attempted_fallbacks=0"
+        },
+        {
+          "t": 0.01,
+          "event": "http_status",
+          "detail": "mode-stall-mid: HTTP 200"
+        },
+        {
+          "t": 0.011,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 3.069,
+          "event": "error_event",
+          "detail": "500: litellm.APIConnectionError: APIConnectionError: OpenAIException - Timeout on reading data from socket"
+        },
+        {
+          "t": 3.069,
+          "event": "stream_end",
+          "detail": "done=False chunks=3 error_event=500: litellm.APIConnectionError: APIConnectionError: OpenAIException - Timeout on reading data from socket"
+        },
+        {
+          "t": 3.821,
+          "event": "journal_fetched",
+          "detail": "1 entries after 0.75s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "stall-mid",
+          "hits": 1
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878485.6590772,
+          "model": "stall-mid",
+          "mode": "stall-mid",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 3,
+          "outcome": "aborted",
+          "duration_s": 3.056853
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "slow-steady-survives",
+      "status": "pass",
+      "duration_s": 10.378,
+      "expected": "steady chunks with gaps under the silence threshold: the stream is never killed despite running far longer than stream_timeout",
+      "observed": "stream success: 12 chunks, done=True, turn 9.62s; journal: slow-steady x1; total 10.38s",
+      "assertions": [
+        {
+          "desc": "client completes with [DONE] and non-empty content",
+          "pass": true,
+          "detail": "status=200 done=True chunks=12 content_len=72"
+        },
+        {
+          "desc": ">= 12 streamed content chunks (steady small gaps)",
+          "pass": true,
+          "detail": "content_chunks=12"
+        },
+        {
+          "desc": "stream turn duration >= 9s (survived despite total > stream_timeout)",
+          "pass": true,
+          "detail": "turn_duration=9.62s"
+        },
+        {
+          "desc": "journal: exactly 1 slow-steady completed hit, no healthy hits (no reroute)",
+          "pass": true,
+          "detail": "slow-steady hits=1 outcomes=['completed'] healthy hits=0 total_entries=1"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 0.011,
+          "event": "router_headers",
+          "detail": "mode-slow-steady: attempted_retries=0, attempted_fallbacks=0"
+        },
+        {
+          "t": 0.011,
+          "event": "http_status",
+          "detail": "mode-slow-steady: HTTP 200"
+        },
+        {
+          "t": 0.012,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 9.625,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 9.625,
+          "event": "stream_end",
+          "detail": "done=True chunks=12 error_event=none"
+        },
+        {
+          "t": 9.625,
+          "event": "turn_duration",
+          "detail": "stream turn lasted 9.62s"
+        },
+        {
+          "t": 10.378,
+          "event": "journal_fetched",
+          "detail": "1 entries after 0.75s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "slow-steady",
+          "hits": 1
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878489.480536,
+          "model": "slow-steady",
+          "mode": "slow-steady",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 12,
+          "outcome": "completed",
+          "duration_s": 9.613309
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "sat-429-cooldown-spillover",
+      "status": "pass",
+      "duration_s": 10.042,
+      "expected": "first 429 failure cools the deployment down; the immediate next request spills over to healthy-pool without hitting the cooling deployment, and after cooldown expiry the deployment is eligible again",
+      "observed": "A: err-429 x2, healthy x1, client ok=True; B: delta=0, healthy x2, client ok=True; C: delta=3, client ok=True; total 10.04s",
+      "assertions": [
+        {
+          "desc": "A: stream success via healthy fallback (429 -> cooldown -> spillover)",
+          "pass": true,
+          "detail": "status=200 done=True chunks=5 error=none"
+        },
+        {
+          "desc": "A: journal err-429 hits >= 1 and healthy completed >= 1",
+          "pass": true,
+          "detail": "err-429 hits=2 healthy completed=1"
+        },
+        {
+          "desc": "B (immediately after): client success",
+          "pass": true,
+          "detail": "status=200 content=Hello from the mock upstream!"
+        },
+        {
+          "desc": "B: err-429 hit delta == 0 while deployment is in cooldown",
+          "pass": true,
+          "detail": "delta=0 (A=2 -> B=2); healthy completed 1 -> 2"
+        },
+        {
+          "desc": "C (~9.5s later): err-429 hit again after cooldown expiry, client success",
+          "pass": true,
+          "detail": "delta=3 status=200"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 0.001,
+          "event": "request_A",
+          "detail": "stream mode-err-429"
+        },
+        {
+          "t": 4.168,
+          "event": "router_headers",
+          "detail": "mode-err-429: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 4.168,
+          "event": "http_status",
+          "detail": "mode-err-429: HTTP 200"
+        },
+        {
+          "t": 4.168,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 4.426,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 4.426,
+          "event": "stream_end",
+          "detail": "done=True chunks=5 error_event=none"
+        },
+        {
+          "t": 4.928,
+          "event": "journal_fetched",
+          "detail": "3 entries after 0.50s settle"
+        },
+        {
+          "t": 4.928,
+          "event": "request_B",
+          "detail": "non-stream mode-err-429 (during cooldown)"
+        },
+        {
+          "t": 4.941,
+          "event": "router_headers",
+          "detail": "mode-err-429: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 4.941,
+          "event": "http_status",
+          "detail": "mode-err-429: HTTP 200"
+        },
+        {
+          "t": 4.941,
+          "event": "completion",
+          "detail": "Hello from the mock upstream!"
+        },
+        {
+          "t": 5.443,
+          "event": "journal_fetched",
+          "detail": "4 entries after 0.50s settle"
+        },
+        {
+          "t": 5.443,
+          "event": "cooldown_check",
+          "detail": "err-429 hit delta after B = 0 (expected 0)"
+        },
+        {
+          "t": 5.443,
+          "event": "cooldown_wait",
+          "detail": "sleeping 4.06s until cooldown expiry"
+        },
+        {
+          "t": 9.508,
+          "event": "request_C",
+          "detail": "non-stream mode-err-429 (after cooldown expiry)"
+        },
+        {
+          "t": 9.54,
+          "event": "router_headers",
+          "detail": "mode-err-429: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 9.54,
+          "event": "http_status",
+          "detail": "mode-err-429: HTTP 200"
+        },
+        {
+          "t": 9.54,
+          "event": "completion",
+          "detail": "Hello from the mock upstream!"
+        },
+        {
+          "t": 10.042,
+          "event": "journal_fetched",
+          "detail": "8 entries after 0.50s settle"
+        },
+        {
+          "t": 10.042,
+          "event": "cooldown_expired_check",
+          "detail": "err-429 hit delta after C = 3"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "err-429",
+          "hits": 2
+        },
+        {
+          "mode": "healthy",
+          "hits": 2
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878499.8581305,
+          "model": "err-429",
+          "mode": "err-429",
+          "stream": true,
+          "status": 429,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.8e-05
+        },
+        {
+          "ts": 1791878499.8729029,
+          "model": "err-429",
+          "mode": "err-429",
+          "stream": true,
+          "status": 429,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.4e-05
+        },
+        {
+          "ts": 1791878504.015669,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 5,
+          "outcome": "completed",
+          "duration_s": 0.25472
+        },
+        {
+          "ts": 1791878504.7880836,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": false,
+          "status": 200,
+          "chunks_sent": 1,
+          "outcome": "completed",
+          "duration_s": 4.3e-05
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "err-5xx-retry-reroute",
+      "status": "pass",
+      "duration_s": 10.847,
+      "expected": "5xx failures in the 2-deployment pools are retried against the healthy sibling (>= 2 upstream hits) before the fallback reroutes to healthy-pool; checked for stream (err-503, err-500) and non-stream (err-500) requests",
+      "observed": "err-503 stream ok=True (hits=2); err-500 stream ok=True (hits=2); err-500 non-stream ok=True (hits=3); healthy per step=1/1/1; total 10.85s",
+      "assertions": [
+        {
+          "desc": "err-503 stream: client success after pool retry + reroute",
+          "pass": true,
+          "detail": "status=200 done=True chunks=5 error=none; router headers: attempted_retries=0 attempted_fallbacks=1"
+        },
+        {
+          "desc": "journal: err-503 hits >= 2 (retried against the sibling deployment)",
+          "pass": true,
+          "detail": "err-503 hits=2"
+        },
+        {
+          "desc": "err-500 stream: client success after pool retry + reroute",
+          "pass": true,
+          "detail": "status=200 done=True chunks=5 error=none; router headers: attempted_retries=0 attempted_fallbacks=1"
+        },
+        {
+          "desc": "journal: err-500 hits >= 2 for the stream request (retry reached the sibling deployment)",
+          "pass": true,
+          "detail": "err-500 hits=2; router headers: attempted_retries=0 attempted_fallbacks=1"
+        },
+        {
+          "desc": "err-500 non-stream: client success after pool retry + reroute",
+          "pass": true,
+          "detail": "status=200 content=Hello from the mock upstream!; router headers: attempted_retries=0 attempted_fallbacks=1"
+        },
+        {
+          "desc": "journal: err-500 hits >= 2 for the non-stream request (retry reached the sibling deployment)",
+          "pass": true,
+          "detail": "err-500 hits=3 (after 8s cooldown-expiry wait); router headers: attempted_retries=0 attempted_fallbacks=1"
+        },
+        {
+          "desc": "journal: one healthy completion per rerouted request (fallback reached each time)",
+          "pass": true,
+          "detail": "healthy completed per step: 1, 1, 1"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 0.001,
+          "event": "request_503",
+          "detail": "stream mode-err-503"
+        },
+        {
+          "t": 0.031,
+          "event": "router_headers",
+          "detail": "mode-err-503: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 0.031,
+          "event": "http_status",
+          "detail": "mode-err-503: HTTP 200"
+        },
+        {
+          "t": 0.031,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 0.287,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 0.287,
+          "event": "stream_end",
+          "detail": "done=True chunks=5 error_event=none"
+        },
+        {
+          "t": 0.789,
+          "event": "journal_fetched",
+          "detail": "3 entries after 0.50s settle"
+        },
+        {
+          "t": 0.789,
+          "event": "request_500_stream",
+          "detail": "stream mode-err-500"
+        },
+        {
+          "t": 4.518,
+          "event": "router_headers",
+          "detail": "mode-err-500: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 4.518,
+          "event": "http_status",
+          "detail": "mode-err-500: HTTP 200"
+        },
+        {
+          "t": 4.519,
+          "event": "first_content_chunk",
+          "detail": "Hello"
+        },
+        {
+          "t": 4.774,
+          "event": "done_marker",
+          "detail": "[DONE]"
+        },
+        {
+          "t": 4.774,
+          "event": "stream_end",
+          "detail": "done=True chunks=5 error_event=none"
+        },
+        {
+          "t": 5.276,
+          "event": "journal_fetched",
+          "detail": "6 entries after 0.50s settle"
+        },
+        {
+          "t": 5.276,
+          "event": "cooldown_wait",
+          "detail": "sleeping 5.03s until the err-500 pool leaves cooldown"
+        },
+        {
+          "t": 10.306,
+          "event": "request_500_nonstream",
+          "detail": "non-stream mode-err-500 (after pool cooldown expiry)"
+        },
+        {
+          "t": 10.344,
+          "event": "router_headers",
+          "detail": "mode-err-500: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 10.344,
+          "event": "http_status",
+          "detail": "mode-err-500: HTTP 200"
+        },
+        {
+          "t": 10.344,
+          "event": "completion",
+          "detail": "Hello from the mock upstream!"
+        },
+        {
+          "t": 10.847,
+          "event": "journal_fetched",
+          "detail": "10 entries after 0.50s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "err-503",
+          "hits": 2
+        },
+        {
+          "mode": "healthy",
+          "hits": 3
+        },
+        {
+          "mode": "err-500",
+          "hits": 5
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878509.8995245,
+          "model": "err-503",
+          "mode": "err-503",
+          "stream": true,
+          "status": 503,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 2.9e-05
+        },
+        {
+          "ts": 1791878509.9096549,
+          "model": "err-503",
+          "mode": "err-503",
+          "stream": true,
+          "status": 503,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 2.5e-05
+        },
+        {
+          "ts": 1791878509.9200304,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 5,
+          "outcome": "completed",
+          "duration_s": 0.254798
+        },
+        {
+          "ts": 1791878510.6881235,
+          "model": "err-500",
+          "mode": "err-500",
+          "stream": true,
+          "status": 500,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.4e-05
+        },
+        {
+          "ts": 1791878510.6980035,
+          "model": "err-500",
+          "mode": "err-500",
+          "stream": true,
+          "status": 500,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 2.2e-05
+        },
+        {
+          "ts": 1791878514.4073412,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": true,
+          "status": 200,
+          "chunks_sent": 5,
+          "outcome": "completed",
+          "duration_s": 0.253898
+        },
+        {
+          "ts": 1791878520.2057853,
+          "model": "err-500",
+          "mode": "err-500",
+          "stream": false,
+          "status": 500,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 4.1e-05
+        },
+        {
+          "ts": 1791878520.2172053,
+          "model": "err-500",
+          "mode": "err-500",
+          "stream": false,
+          "status": 500,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 4.1e-05
+        },
+        {
+          "ts": 1791878520.223906,
+          "model": "err-500",
+          "mode": "err-500",
+          "stream": false,
+          "status": 500,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 4.3e-05
+        },
+        {
+          "ts": 1791878520.2313135,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": false,
+          "status": 200,
+          "chunks_sent": 1,
+          "outcome": "completed",
+          "duration_s": 4.6e-05
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "err-404-no-retry",
+      "status": "pass",
+      "duration_s": 0.774,
+      "expected": "a 404 (NotFoundError) is never retried: exactly one upstream hit, regardless of num_retries/retry_policy",
+      "observed": "client outcome: fallback success via healthy-pool (HTTP 200); err-404 hits=1; healthy hits=1; total 0.77s",
+      "assertions": [
+        {
+          "desc": "journal: exactly 1 err-404 hit (404 never retried)",
+          "pass": true,
+          "detail": "err-404 hits=1 outcomes=['errored'] chunks_sent=[0]"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 0.022,
+          "event": "router_headers",
+          "detail": "mode-err-404: attempted_retries=0, attempted_fallbacks=1"
+        },
+        {
+          "t": 0.022,
+          "event": "http_status",
+          "detail": "mode-err-404: HTTP 200"
+        },
+        {
+          "t": 0.023,
+          "event": "completion",
+          "detail": "Hello from the mock upstream!"
+        },
+        {
+          "t": 0.774,
+          "event": "journal_fetched",
+          "detail": "2 entries after 0.75s settle"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "err-404",
+          "hits": 1
+        },
+        {
+          "mode": "healthy",
+          "hits": 1
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878520.7464063,
+          "model": "err-404",
+          "mode": "err-404",
+          "stream": false,
+          "status": 404,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.7e-05
+        },
+        {
+          "ts": 1791878520.7579005,
+          "model": "healthy",
+          "mode": "healthy",
+          "stream": false,
+          "status": 200,
+          "chunks_sent": 1,
+          "outcome": "completed",
+          "duration_s": 4e-05
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "sat-all-failing-bounded",
+      "status": "pass",
+      "duration_s": 4.381,
+      "expected": "a group whose every deployment fails (and chains to another all-failing group) fails the client turn in bounded time: retried against the pool siblings, no healthy hit, no hang",
+      "observed": "client error (HTTP 429 error response (internal_server_error/429: litellm.ServiceUnavailableError: ServiceUnavailableError: OpenAIException - Injected service unavailable\n\nLiteLLM: model group 'sat-all-failing' failed with the error above. Fallback to sat-backup-failing also failed: No deployments available for selected model, Try again in 8 seconds. All deployments for selected model are in cooldown. Passed model=sat-backup-failing. pre-call-checks=False, cooldown_list=['mode-err-500-a', 'mode-err-404-b', 'sat-all-failing-a', 'sat-all-failing-b', 'sat-backup-failing-a', 'sat-backup-failing-b'])); err-503 x2, err-429 x2, healthy x0; turn 3.63s, total 4.38s",
+      "assertions": [
+        {
+          "desc": "client eventually receives an error (no success)",
+          "pass": true,
+          "detail": "manifestation=HTTP 429 error response (internal_server_error/429: litellm.ServiceUnavailableError: ServiceUnavailableError: OpenAIException - Injected service unavailable\n\nLiteLLM: model group 'sat-all-failing' failed with the error above. Fallback to sat-backup-failing also failed: No deployments available for selected model, Try again in 8 seconds. All deployments for selected model are in cooldown. Passed model=sat-backup-failing. pre-call-checks=False, cooldown_list=['mode-err-500-a', 'mode-err-404-b', 'sat-all-failing-a', 'sat-all-failing-b', 'sat-backup-failing-a', 'sat-backup-failing-b']); router headers: absent"
+        },
+        {
+          "desc": "bounded failure: turn duration < 60s (no hang)",
+          "pass": true,
+          "detail": "turn_duration=3.63s"
+        },
+        {
+          "desc": "journal: err-503 hits >= 2 (retried against the sibling in the all-failing pool)",
+          "pass": true,
+          "detail": "err-503 hits=2"
+        },
+        {
+          "desc": "journal: err-429 hits >= 2 (backup pool retried against its sibling before total exhaustion)",
+          "pass": true,
+          "detail": "err-429 hits=2"
+        },
+        {
+          "desc": "journal: no healthy hits (sat groups have no healthy member)",
+          "pass": true,
+          "detail": "healthy hits=0"
+        }
+      ],
+      "timeline": [
+        {
+          "t": 0.001,
+          "event": "journal_reset",
+          "detail": "DELETE /__hits ok"
+        },
+        {
+          "t": 3.629,
+          "event": "http_status",
+          "detail": "sat-all-failing: HTTP 429"
+        },
+        {
+          "t": 3.629,
+          "event": "turn_duration",
+          "detail": "failing turn lasted 3.63s"
+        },
+        {
+          "t": 4.381,
+          "event": "journal_fetched",
+          "detail": "4 entries after 0.75s settle"
+        },
+        {
+          "t": 4.381,
+          "event": "journal_counts",
+          "detail": "err-503 x2, err-429 x2, healthy x0"
+        }
+      ],
+      "served_by": [
+        {
+          "mode": "err-503",
+          "hits": 2
+        },
+        {
+          "mode": "err-429",
+          "hits": 2
+        }
+      ],
+      "mocked_hits": [
+        {
+          "ts": 1791878521.5210288,
+          "model": "err-503",
+          "mode": "err-503",
+          "stream": true,
+          "status": 503,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.2e-05
+        },
+        {
+          "ts": 1791878521.5319247,
+          "model": "err-503",
+          "mode": "err-503",
+          "stream": true,
+          "status": 503,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.6e-05
+        },
+        {
+          "ts": 1791878521.543008,
+          "model": "err-429",
+          "mode": "err-429",
+          "stream": true,
+          "status": 429,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 2.4e-05
+        },
+        {
+          "ts": 1791878521.5530536,
+          "model": "err-429",
+          "mode": "err-429",
+          "stream": true,
+          "status": 429,
+          "chunks_sent": 0,
+          "outcome": "errored",
+          "duration_s": 3.1e-05
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "passed": 8,
+    "failed": 0,
+    "status": "pass"
+  }
+}

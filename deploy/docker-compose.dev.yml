@@ -30,6 +30,13 @@ services:
     build: ../runner
     environment:
       - LAB_BASE_URL=http://litellm-lab:4000
+      - LAB_PROFILE=${LAB_PROFILE:-quick}
+      - LAB_MOCK_URL=http://mock-upstream:8000
+      - LAB_GIT_REV=${LAB_GIT_REV:-unknown}
+    volumes:
+      - ../reports:/app/reports
+      - ../lab_config:/lab_config:ro
+      - ../deploy:/deploy:ro
     depends_on:
       - litellm-lab
     restart: "no"
