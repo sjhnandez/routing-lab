@@ -1,4 +1,6 @@
 # lab-api runtime dependencies, pinned (aligned with mock_upstream/requirements.txt
-# and tests/requirements.txt). The API is stdlib + fastapi/uvicorn only.
+# and tests/requirements.txt). The API is stdlib + fastapi/uvicorn; httpx
+# streams POST /api/chat to the production router.
 fastapi==0.143.0
 uvicorn==0.54.0
+httpx==0.28.1

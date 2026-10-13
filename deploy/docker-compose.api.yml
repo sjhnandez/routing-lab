@@ -8,7 +8,8 @@
 # deploy/docker-compose.lab.yml). Run from the repo root:
 #   up:      docker compose -f deploy/docker-compose.api.yml up -d --build
 #   down:    docker compose -f deploy/docker-compose.api.yml down
-#   kill switch: LAB_TRIGGER=off docker compose -f deploy/docker-compose.api.yml up -d
+#   kill switches: LAB_TRIGGER=off docker compose -f deploy/docker-compose.api.yml up -d
+#                  LAB_CHAT=off    docker compose -f deploy/docker-compose.api.yml up -d
 
 name: routing-lab-api
 
@@ -26,8 +27,12 @@ services:
       - ../queue:/app/queue
       - ../docs:/app/docs:ro
       - ../prober/history:/app/prober-history:ro
+      # POST /api/chat reads LITELLM_MASTER_KEY from this file at request
+      # time; read-only, and the key never enters the environment or the repo.
+      - /home/server/stacks/apps/.env:/secrets/apps.env:ro
     environment:
       - LAB_TRIGGER=${LAB_TRIGGER:-on}
+      - LAB_CHAT=${LAB_CHAT:-on}
       - LAB_PROBER_HISTORY_DIR=/app/prober-history
     deploy:
       resources:

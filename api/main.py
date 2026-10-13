@@ -9,19 +9,30 @@ Endpoints (frozen contract, consumed by dashboard/):
   POST /api/run             202 {"id"} | 429 {"reason","retry_after_s"?} | 503
   GET  /api/run/{id}/events text/event-stream: replay + tail, closes after
                             ``done``/``error``
+  POST /api/chat            "Try the router" proxy: SSE stream of the live
+                            production router's answer, then one ``event:
+                            meta`` frame; JSON 4xx/5xx on the gates
   GET  /api/last-run        {"report": <full report JSON>|null}
   GET  /api/history         [{run_id,profile,started_at,duration_s,summary}]
   GET  /api/fleet           prober history aggregate: {generated_at,available,note,
                             budget,last_24h,models,recent} (read-only, no probing)
   GET  /api/reports/{id}    full report JSON
   GET  /api/docs            {"methodology","scenarios"} markdown strings
-  GET  /api/health          {"status","trigger_enabled","queue":{...}}
+  GET  /api/health          {"status","trigger_enabled","chat_enabled","queue":{...}}
   GET  /                    dashboard static bundle (SPA fallback); plain 503
                             placeholder while ``dashboard/dist`` is absent
 
 Gates on POST /api/run, in order: LAB_TRIGGER kill switch (503), single
 concurrency (429 run_in_progress), 120 s cooldown since the newest queue
 entry (429 cooldown), per-IP 1 request / 10 min (429 rate_limited).
+
+Gates on POST /api/chat, in order: LAB_CHAT kill switch (503 chat_disabled),
+body validation (400 message_empty / message_too_long), key availability
+(503 router_key_missing when the read-only ``LITELLM_KEY_FILE`` mount has no
+``LITELLM_MASTER_KEY``), per-IP window (429 rate_limited), global in-flight
+cap (429 busy). The per-IP window and the in-flight counter live in memory
+(``app.state.chat``), so they are per-process - api/Dockerfile pins a single
+uvicorn worker, like the run gates above.
 
 State is derived from ``queue/<id>.json`` files written by this API, and is
 appended to by the executor; both run on the same host via bind mounts (the
@@ -37,11 +48,13 @@ import json
 import math
 import os
 import re
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import (
     FileResponse,
@@ -81,6 +94,17 @@ FLEET_RECENT_LIMIT = 50
 FLEET_DEFAULT_CAP = 48
 FLEET_EMPTY_NOTE = "prober has not run yet"
 
+# POST /api/chat knobs. The system prompt is fixed; the composition of the
+# upstream request is part of the frozen contract (api+tests+UI).
+CHAT_SYSTEM_PROMPT = (
+    "You are answering via routing-lab, a demo of this server's LLM router. "
+    "Be concise and helpful."
+)
+CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
+CHAT_CONNECT_TIMEOUT_S = 15.0
+CHAT_READ_TIMEOUT_S = 90.0
+CHAT_BUSY_RETRY_AFTER_S = 5
+
 _FALSY = {"off", "0", "false", "no"}
 
 
@@ -117,6 +141,18 @@ class Config:
     rate_limit_window_s: float = 600.0
     rate_limit_max: int = 1
     sse_poll_s: float = 0.5
+    # POST /api/chat (see module docstring). ``chat_transport`` is a test
+    # seam: inject ``httpx.MockTransport`` instead of talking to litellm.
+    chat_enabled: bool = True
+    chat_max_chars: int = 400
+    chat_rate_max: int = 5
+    chat_rate_window_s: float = 600.0
+    chat_max_inflight: int = 3
+    chat_max_tokens: int = 250
+    litellm_url: str = "http://litellm:4000"
+    litellm_chat_model: str = "free-chat"
+    litellm_key_file: Path = Path("/secrets/apps.env")
+    chat_transport: Optional[httpx.AsyncBaseTransport] = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -133,6 +169,17 @@ class Config:
             rate_limit_window_s=_env_float("LAB_RATE_LIMIT_WINDOW_S", 600.0),
             rate_limit_max=_env_int("LAB_RATE_LIMIT_MAX", 1),
             sse_poll_s=_env_float("LAB_SSE_POLL_S", 0.5),
+            chat_enabled=_env_flag("LAB_CHAT", default=True),
+            chat_max_chars=_env_int("LAB_CHAT_MAX_CHARS", 400),
+            chat_rate_max=_env_int("LAB_CHAT_RATE_MAX", 5),
+            chat_rate_window_s=_env_float("LAB_CHAT_RATE_WINDOW_S", 600.0),
+            chat_max_inflight=_env_int("LAB_CHAT_MAX_INFLIGHT", 3),
+            chat_max_tokens=_env_int("LAB_CHAT_MAX_TOKENS", 250),
+            litellm_url=os.environ.get("LITELLM_URL", "http://litellm:4000"),
+            litellm_chat_model=os.environ.get("LITELLM_CHAT_MODEL", "free-chat"),
+            litellm_key_file=Path(
+                os.environ.get("LITELLM_KEY_FILE", "/secrets/apps.env")
+            ),
         )
 
 
@@ -146,6 +193,59 @@ class QueueEntry:
 
 def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
+
+
+# Master keys parsed from ``LITELLM_KEY_FILE`` (path string -> key or None),
+# so the file is read at most once per process. Failures are cached too: an
+# empty result fails closed (503 router_key_missing) until the API restarts.
+_MASTER_KEY_CACHE: dict[str, Optional[str]] = {}
+
+
+def _strip_quotes(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+        return value[1:-1]
+    return value
+
+
+def _parse_env_value(text: str, name: str) -> Optional[str]:
+    """Return the ``name`` value from dotenv-style ``text`` (or None).
+
+    Handles a leading ``export ``, ``KEY=value`` and an optional pair of
+    wrapping single/double quotes; ``#`` comments and blank lines are
+    skipped. Never raises: the key is a server-side secret and a malformed
+    file must fail closed, not crash the handler.
+    """
+    try:
+        lines = text.splitlines()
+    except AttributeError:
+        return None
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        name_part, sep, value_part = line.partition("=")
+        if sep and name_part.strip() == name:
+            value = _strip_quotes(value_part)
+            return value or None
+    return None
+
+
+def _load_master_key(path: Path) -> Optional[str]:
+    """Master key for the production router, read from ``path`` and cached."""
+    cache_key = str(path)
+    if cache_key in _MASTER_KEY_CACHE:
+        return _MASTER_KEY_CACHE[cache_key]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        value = None
+    else:
+        value = _parse_env_value(text, "LITELLM_MASTER_KEY")
+    _MASTER_KEY_CACHE[cache_key] = value
+    return value
 
 
 def _iso_z(moment: dt.datetime) -> str:
@@ -500,9 +600,173 @@ def _fleet_payload(cfg: Config, now: dt.datetime) -> dict[str, Any]:
     }
 
 
+@dataclass
+class ChatState:
+    """In-memory POST /api/chat gates (single worker: per-process is fine).
+
+    ``windows`` maps visitor IPs to the monotonic timestamps of their recent
+    accepted messages; entries older than the window are pruned on access
+    and empty windows are dropped, so the dict stays bounded by live
+    visitors. ``inflight`` counts messages currently being proxied upstream
+    (incremented by the handler, decremented in ``_chat_stream``'s finally
+    block, which starlette runs on completion, error and client disconnect).
+    """
+
+    windows: dict[str, list[float]] = field(default_factory=dict)
+    inflight: int = 0
+
+    def acquire(self, ip: str, now: float, window_s: float, max_hits: int) -> Optional[int]:
+        """Record a hit for ``ip``; return ``None`` when admitted, else the
+        whole seconds until its oldest in-window hit expires."""
+        hits = self.windows.get(ip)
+        if hits is None:
+            hits = self.windows[ip] = []
+        cutoff = now - window_s
+        hits[:] = [t for t in hits if t > cutoff]
+        if len(hits) >= max_hits:
+            return max(int(math.ceil(hits[0] + window_s - now)), 1)
+        hits.append(now)
+        if len(self.windows) > 1024:
+            for key in [k for k, v in self.windows.items() if not v]:
+                del self.windows[key]
+        return None
+
+
+def _header_int(response: httpx.Response, name: str) -> Optional[int]:
+    raw = response.headers.get(name)
+    if raw is None:
+        return None
+    try:
+        return int(raw.strip())
+    except ValueError:
+        return None
+
+
+def _upstream_error_reason(status: int) -> str:
+    """Map an upstream status to the frozen reason set."""
+    if status in (429, 503):
+        # 429: all pools rate limited; 503: router up but no deployment.
+        return "pools_busy"
+    if status in (408, 504):
+        return "router_timeout"
+    return "router_error"
+
+
+def _sse_event(event: str, payload: dict[str, Any]) -> str:
+    return "event: " + event + "\ndata: " + json.dumps(payload, separators=(",", ":")) + "\n\n"
+
+
+def _chat_upstream_request(cfg: Config, key: str, message: str) -> tuple[str, dict[str, Any], dict[str, str]]:
+    """URL, JSON body and headers for the streaming upstream call."""
+    return (
+        cfg.litellm_url.rstrip("/") + CHAT_COMPLETIONS_PATH,
+        {
+            "model": cfg.litellm_chat_model,
+            "messages": [
+                {"role": "system", "content": CHAT_SYSTEM_PROMPT},
+                {"role": "user", "content": message},
+            ],
+            "max_tokens": cfg.chat_max_tokens,
+            "stream": True,
+        },
+        {"Authorization": "Bearer " + key, "Accept": "text/event-stream"},
+    )
+
+
+async def _chat_stream(
+    cfg: Config,
+    state: ChatState,
+    key: str,
+    message: str,
+) -> Any:
+    """Stream the upstream SSE answer, then one ``event: meta`` frame.
+
+    Upstream ``data:`` lines pass through unchanged; once the upstream
+    ``data: [DONE]`` line has been forwarded the router's accounting headers
+    are emitted as a single ``event: meta`` frame and the stream ends. Any
+    upstream failure - non-2xx status, timeout, transport error, or a stream
+    that ends without ``[DONE]`` - is reported as one ``event: error`` frame
+    (no ``[DONE]``), so the client always sees a well-formed SSE stream.
+    """
+    started = time.monotonic()
+    url, body, headers = _chat_upstream_request(cfg, key, message)
+    status: Optional[int] = None
+    # ``terminal_sent`` keeps the stream faithful if closing the upstream
+    # connection raises after a terminal frame was already emitted.
+    terminal_sent = False
+    try:
+        timeout = httpx.Timeout(
+            CHAT_READ_TIMEOUT_S, connect=CHAT_CONNECT_TIMEOUT_S
+        )
+        async with httpx.AsyncClient(
+            transport=cfg.chat_transport, timeout=timeout
+        ) as client:
+            async with client.stream(
+                "POST", url, json=body, headers=headers
+            ) as response:
+                status = response.status_code
+                if not 200 <= status < 300:
+                    yield _sse_event(
+                        "error",
+                        {"reason": _upstream_error_reason(status), "status": status},
+                    )
+                    terminal_sent = True
+                    return
+                async for line in response.aiter_lines():
+                    stripped = line.strip()
+                    if not stripped.startswith("data:"):
+                        continue  # blank separators / upstream comments
+                    if stripped[len("data:") :].strip() == "[DONE]":
+                        yield stripped + "\n\n"
+                        latency_ms = int((time.monotonic() - started) * 1000)
+                        yield _sse_event(
+                            "meta",
+                            {
+                                "served_by": response.headers.get(
+                                    "x-litellm-model-group"
+                                ),
+                                "model_id": response.headers.get(
+                                    "x-litellm-model-id"
+                                ),
+                                "attempted_retries": _header_int(
+                                    response, "x-litellm-attempted-retries"
+                                ),
+                                "attempted_fallbacks": _header_int(
+                                    response, "x-litellm-attempted-fallbacks"
+                                ),
+                                "latency_ms": latency_ms,
+                            },
+                        )
+                        terminal_sent = True
+                        return
+                    yield stripped + "\n\n"  # passthrough chunk, verbatim
+        # Upstream 2xx but the stream ended without [DONE]: truncation.
+        yield _sse_event("error", {"reason": "router_error", "status": 502})
+        terminal_sent = True
+    except httpx.TimeoutException:
+        if not terminal_sent:
+            yield _sse_event(
+                "error", {"reason": "router_timeout", "status": 504}
+            )
+    except httpx.HTTPError:
+        if not terminal_sent:
+            # Non-2xx upstream statuses are handled above, so either no
+            # response arrived (connection failure) or the 2xx stream broke
+            # mid-flight: report the failure as a gateway error.
+            failed_status = status if status is not None and status >= 400 else 502
+            yield _sse_event(
+                "error",
+                {"reason": "router_error", "status": failed_status},
+            )
+    finally:
+        state.inflight -= 1
+
+
 def create_app(config: Optional[Config] = None) -> FastAPI:
     cfg = config or Config.from_env()
     app = FastAPI(title="routing-lab lab-api", version="0.1.0")
+    # In-memory chat gates; exposed for tests and admin introspection.
+    app.state.chat = ChatState()
 
     @app.post("/api/run")
     async def post_run(request: Request) -> JSONResponse:
@@ -613,6 +877,7 @@ def create_app(config: Optional[Config] = None) -> FastAPI:
         return {
             "status": "ok",
             "trigger_enabled": cfg.trigger_enabled,
+            "chat_enabled": cfg.chat_enabled,
             "queue": {
                 "pending": sum(1 for e in entries if e.status == "pending"),
                 "running": sum(1 for e in entries if e.status == "running"),
@@ -622,6 +887,54 @@ def create_app(config: Optional[Config] = None) -> FastAPI:
     @app.get("/api/fleet")
     async def fleet() -> dict[str, Any]:
         return _fleet_payload(cfg, _utcnow())
+
+    @app.post("/api/chat")
+    async def chat(request: Request):
+        """Proxy the "Try the router" demo: stream the production answer.
+
+        Gates in order (see module docstring); once past them the response is
+        always ``text/event-stream`` - upstream failures arrive as ``event:
+        error`` frames, so a client needs only one parser. The master key is
+        read (and cached) from ``cfg.litellm_key_file`` at request time: it
+        lives on a read-only mount, never in the environment.
+        """
+        state: ChatState = app.state.chat
+        if not cfg.chat_enabled:
+            return JSONResponse({"reason": "chat_disabled"}, status_code=503)
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+        message = payload.get("message") if isinstance(payload, dict) else None
+        if not isinstance(message, str) or not message.strip():
+            return JSONResponse({"reason": "message_empty"}, status_code=400)
+        if len(message) > cfg.chat_max_chars:
+            return JSONResponse({"reason": "message_too_long"}, status_code=400)
+        key = _load_master_key(cfg.litellm_key_file)
+        if not key:
+            return JSONResponse({"reason": "router_key_missing"}, status_code=503)
+        retry_after_s = state.acquire(
+            _source_ip(request),
+            time.monotonic(),
+            cfg.chat_rate_window_s,
+            cfg.chat_rate_max,
+        )
+        if retry_after_s is not None:
+            return JSONResponse(
+                {"reason": "rate_limited", "retry_after_s": retry_after_s},
+                status_code=429,
+            )
+        if state.inflight >= cfg.chat_max_inflight:
+            return JSONResponse(
+                {"reason": "busy", "retry_after_s": CHAT_BUSY_RETRY_AFTER_S},
+                status_code=429,
+            )
+        state.inflight += 1
+        return StreamingResponse(
+            _chat_stream(cfg, state, key, message),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # Dashboard bundle at "/" with SPA fallback; registered last so every
     # /api/* route above wins. Unknown /api/* paths get a JSON 404.
