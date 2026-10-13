@@ -179,6 +179,8 @@ export type ChatStreamErrorReason = 'pools_busy' | 'router_error' | 'router_time
 export interface ChatMeta {
   served_by: string | null
   model_id: string | null
+  /** Concrete deployment that answered (e.g. `vendor/model:free`), when known. */
+  model_name: string | null
   attempted_retries: number | null
   attempted_fallbacks: number | null
   latency_ms: number | null

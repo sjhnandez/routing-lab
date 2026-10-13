@@ -265,6 +265,7 @@ function parseChatMeta(data: string): ChatMeta | null {
   return {
     served_by: str(record.served_by),
     model_id: str(record.model_id),
+    model_name: str(record.model_name),
     attempted_retries: num(record.attempted_retries),
     attempted_fallbacks: num(record.attempted_fallbacks),
     latency_ms: num(record.latency_ms),

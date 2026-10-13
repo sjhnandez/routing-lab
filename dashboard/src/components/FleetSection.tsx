@@ -73,7 +73,7 @@ function FleetEmptyState() {
   return (
     <div>
       <p className="text-sm text-muted">
-        The production prober runs host-side after deployment — no probe data yet.
+        The production prober runs host-side after deployment: no probe data yet.
       </p>
       <p className="mt-1 text-xs text-dim">
         Once it runs, this tab shows today's probe budget, last-24h failure classes, per-model

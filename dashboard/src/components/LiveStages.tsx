@@ -90,7 +90,7 @@ export function LiveStages({ progress, live }: LiveStagesProps) {
 
   let statusLabel = 'waiting for events'
   if (failed) statusLabel = 'failed'
-  else if (finished) statusLabel = 'done — results refreshed below'
+  else if (finished) statusLabel = 'done: results refreshed below'
   else if (live) statusLabel = 'running'
 
   return (

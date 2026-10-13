@@ -37,6 +37,7 @@ META_HEADERS = {
     "content-type": "text/event-stream",
     "x-litellm-model-group": "free-chat",
     "x-litellm-model-id": "text-chat-primary",
+    "x-litellm-model-name": "openrouter/vendor/model:free",
     "x-litellm-attempted-retries": "1",
     "x-litellm-attempted-fallbacks": "0",
 }
@@ -70,11 +71,22 @@ def sse_data(obj: object) -> str:
     return "data: " + json.dumps(obj) + "\n\n"
 
 
-def chunks_body() -> str:
+def chunks_body(model: str | None = None) -> str:
+    """Two content deltas, a finish_reason chunk and ``[DONE]``.
+
+    ``model`` stamps every chunk with a ``model`` field; the default None
+    keeps the body byte-identical to the pre-model_name fixtures.
+    """
+
+    def chunk(payload: dict) -> str:
+        if model is not None:
+            payload = {"model": model, **payload}
+        return sse_data(payload)
+
     return (
-        sse_data({"choices": [{"index": 0, "delta": {"content": "Hello"}}]})
-        + sse_data({"choices": [{"index": 0, "delta": {"content": " world"}}]})
-        + sse_data({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+        chunk({"choices": [{"index": 0, "delta": {"content": "Hello"}}]})
+        + chunk({"choices": [{"index": 0, "delta": {"content": " world"}}]})
+        + chunk({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
         + "data: [DONE]\n\n"
     )
 
@@ -387,6 +399,7 @@ def test_streams_upstream_chunks_then_meta(tmp_path):
     meta = json.loads(events[4][1])
     assert meta["served_by"] == "free-chat"
     assert meta["model_id"] == "text-chat-primary"
+    assert meta["model_name"] == "vendor/model:free"  # one openrouter/ segment stripped
     assert meta["attempted_retries"] == 1
     assert meta["attempted_fallbacks"] == 0
     assert isinstance(meta["latency_ms"], int) and meta["latency_ms"] >= 0
@@ -446,10 +459,68 @@ def test_meta_defaults_to_none_without_accounting_headers(tmp_path):
     assert meta == {
         "served_by": None,
         "model_id": None,
+        "model_name": None,
         "attempted_retries": None,
         "attempted_fallbacks": None,
         "latency_ms": meta["latency_ms"],
     }
+
+
+def test_meta_model_name_keeps_slashless_openrouter_value(tmp_path):
+    """``openrouter/free`` has no path after the prefix, so it stays intact."""
+    headers = {
+        "content-type": "text/event-stream",
+        "x-litellm-model-name": "openrouter/free",
+    }
+    requests: list = []
+    client = streaming_client(tmp_path, requests, body=chunks_body(), headers=headers)
+    events = parse_sse(client.post("/api/chat", json={"message": "hi"}).text)
+    assert json.loads(events[-1][1])["model_name"] == "openrouter/free"
+
+
+def test_meta_model_name_falls_back_to_last_chunk_model(tmp_path):
+    """No header: the last chunk model wins when it differs from the alias."""
+    body = (
+        sse_data(
+            {"model": "first/model", "choices": [{"index": 0, "delta": {"content": "a"}}]}
+        )
+        + sse_data(
+            {"model": "last/model:free", "choices": [{"index": 0, "delta": {"content": "b"}}]}
+        )
+        + sse_data({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
+        + "data: [DONE]\n\n"
+    )
+    requests: list = []
+    client = streaming_client(
+        tmp_path, requests, body=body, headers={"content-type": "text/event-stream"}
+    )
+    events = parse_sse(client.post("/api/chat", json={"message": "hi"}).text)
+    assert json.loads(events[-1][1])["model_name"] == "last/model:free"
+
+
+def test_meta_model_name_null_when_chunks_only_repeat_the_alias(tmp_path):
+    """No header and the chunk model IS the alias: nothing more to show."""
+    requests: list = []
+    client = streaming_client(
+        tmp_path,
+        requests,
+        body=chunks_body(model="free-chat"),
+        headers={"content-type": "text/event-stream"},
+    )
+    events = parse_sse(client.post("/api/chat", json={"message": "hi"}).text)
+    assert json.loads(events[-1][1])["model_name"] is None
+
+
+def test_meta_model_name_header_wins_over_chunk_model(tmp_path):
+    requests: list = []
+    client = streaming_client(
+        tmp_path,
+        requests,
+        body=chunks_body(model="free-chat"),
+        headers=META_HEADERS,
+    )
+    events = parse_sse(client.post("/api/chat", json={"message": "hi"}).text)
+    assert json.loads(events[-1][1])["model_name"] == "vendor/model:free"
 
 
 # ---------------------------------------------------------------------------

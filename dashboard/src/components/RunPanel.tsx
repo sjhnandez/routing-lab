@@ -24,13 +24,13 @@ function phaseNote(phase: RunPhase, cooldownRemainingS: number | null): string {
     case 'starting':
       return 'Requesting a run slot…'
     case 'live':
-      return 'Run in progress — stages stream in below.'
+      return 'Run in progress: stages stream in below.'
     case 'cooldown':
-      return `${phase.reason === 'rate_limited' ? 'Rate limited' : 'Cooling down'} — retry in ${cooldownRemainingS ?? phase.seconds}s.`
+      return `${phase.reason === 'rate_limited' ? 'Rate limited' : 'Cooling down'}: retry in ${cooldownRemainingS ?? phase.seconds}s.`
     case 'blocked':
       return phase.reason === 'trigger_disabled'
         ? 'The run trigger is disabled on the server.'
-        : 'A run is already in progress — the button re-enables when it finishes.'
+        : 'A run is already in progress: the button re-enables when it finishes.'
   }
 }
 
@@ -98,7 +98,7 @@ export function RunPanel({
                   {phase.kind === 'starting' && 'Starting…'}
                   {phase.kind === 'live' && 'Running…'}
                   {phase.kind === 'cooldown' &&
-                    `Cooling down — ${cooldownRemainingS ?? phase.seconds}s`}
+                    `Cooling down - ${cooldownRemainingS ?? phase.seconds}s`}
                   {phase.kind === 'blocked' && 'Run experiment'}
                 </button>
                 <p className="text-xs text-dim lg:text-right" aria-live="polite">

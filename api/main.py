@@ -642,6 +642,54 @@ def _header_int(response: httpx.Response, name: str) -> Optional[int]:
         return None
 
 
+def _strip_one_openrouter_segment(value: str) -> str:
+    """Drop ONE leading ``openrouter/`` segment when a path still follows.
+
+    ``openrouter/vendor/model:free`` -> ``vendor/model:free``; a remainder
+    without ``/`` (``openrouter/free``) stays intact.
+    """
+    prefix = "openrouter/"
+    if value.startswith(prefix):
+        remainder = value[len(prefix) :]
+        if "/" in remainder:
+            return remainder
+    return value
+
+
+def _chunk_model(payload: str) -> Optional[str]:
+    """The ``model`` field of one streamed ``data:`` chunk, or None."""
+    try:
+        obj = json.loads(payload)
+    except ValueError:
+        return None
+    if not isinstance(obj, dict):
+        return None
+    model = obj.get("model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+    return None
+
+
+def _chat_model_name(
+    header_value: Optional[str], last_chunk_model: Optional[str], alias: str
+) -> Optional[str]:
+    """The concrete model that answered, for the ``meta`` frame.
+
+    Prefers litellm's ``x-litellm-model-name`` (the router's deployment
+    string, e.g. ``openrouter/<vendor>/<model>:free``), keeping everything
+    after one leading ``openrouter/`` segment. Without the header, falls
+    back to the last streamed chunk's ``model`` only when it differs from
+    the requested alias; null when nothing more specific is known.
+    """
+    if header_value is not None:
+        value = header_value.strip()
+        if value:
+            return _strip_one_openrouter_segment(value)
+    if last_chunk_model is not None and last_chunk_model != alias:
+        return last_chunk_model
+    return None
+
+
 def _upstream_error_reason(status: int) -> str:
     """Map an upstream status to the frozen reason set."""
     if status in (429, 503):
@@ -683,10 +731,11 @@ async def _chat_stream(
 
     Upstream ``data:`` lines pass through unchanged; once the upstream
     ``data: [DONE]`` line has been forwarded the router's accounting headers
-    are emitted as a single ``event: meta`` frame and the stream ends. Any
-    upstream failure - non-2xx status, timeout, transport error, or a stream
-    that ends without ``[DONE]`` - is reported as one ``event: error`` frame
-    (no ``[DONE]``), so the client always sees a well-formed SSE stream.
+    plus the best-known served model are emitted as a single ``event: meta``
+    frame and the stream ends. Any upstream failure - non-2xx status,
+    timeout, transport error, or a stream that ends without ``[DONE]`` - is
+    reported as one ``event: error`` frame (no ``[DONE]``), so the client
+    always sees a well-formed SSE stream.
     """
     started = time.monotonic()
     url, body, headers = _chat_upstream_request(cfg, key, message)
@@ -694,6 +743,10 @@ async def _chat_stream(
     # ``terminal_sent`` keeps the stream faithful if closing the upstream
     # connection raises after a terminal frame was already emitted.
     terminal_sent = False
+    # Fallback for the ``meta`` model_name field: the concrete model as
+    # reported by the last streamed chunk (only used when it says more than
+    # the requested alias and the accounting header is absent).
+    last_chunk_model: Optional[str] = None
     try:
         timeout = httpx.Timeout(
             CHAT_READ_TIMEOUT_S, connect=CHAT_CONNECT_TIMEOUT_S
@@ -728,6 +781,11 @@ async def _chat_stream(
                                 "model_id": response.headers.get(
                                     "x-litellm-model-id"
                                 ),
+                                "model_name": _chat_model_name(
+                                    response.headers.get("x-litellm-model-name"),
+                                    last_chunk_model,
+                                    cfg.litellm_chat_model,
+                                ),
                                 "attempted_retries": _header_int(
                                     response, "x-litellm-attempted-retries"
                                 ),
@@ -739,6 +797,9 @@ async def _chat_stream(
                         )
                         terminal_sent = True
                         return
+                    chunk_model = _chunk_model(stripped[len("data:") :].strip())
+                    if chunk_model is not None:
+                        last_chunk_model = chunk_model
                     yield stripped + "\n\n"  # passthrough chunk, verbatim
         # Upstream 2xx but the stream ended without [DONE]: truncation.
         yield _sse_event("error", {"reason": "router_error", "status": 502})

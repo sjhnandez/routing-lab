@@ -37,13 +37,13 @@ function rejectionNotice(rejection: ChatRejectedError): string {
     case 'message_too_long':
       return 'that message is over the 400-character cap.'
     case 'rate_limited':
-      return "you've reached the free-tier limit — 5 messages / 10 min per visitor."
+      return "you've reached the free-tier limit: 5 messages / 10 min per visitor."
     case 'busy':
-      return 'the demo is busy right now — try again in a moment.'
+      return 'the demo is busy right now, try again in a moment.'
     case 'chat_disabled':
       return 'chat is paused.'
     case 'router_key_missing':
-      return 'chat is paused — the router key is not configured.'
+      return 'chat is paused: the router key is not configured.'
   }
 }
 
@@ -51,11 +51,11 @@ function rejectionNotice(rejection: ChatRejectedError): string {
 function streamErrorNotice(reason: ChatStreamErrorReason): string {
   switch (reason) {
     case 'pools_busy':
-      return 'all free pools are cooling down — try again in a moment.'
+      return 'all free pools are cooling down, try again in a moment.'
     case 'router_timeout':
-      return 'the router timed out before the reply finished — try again.'
+      return 'the router timed out before the reply finished, try again.'
     case 'router_error':
-      return 'the router returned an error — try again.'
+      return 'the router returned an error, try again.'
   }
 }
 
@@ -158,7 +158,7 @@ export function useChat() {
               return { ...turn, reasoningCapped: true }
             }
             if (turn.answer === '' && turn.reasoning === '') {
-              return { ...turn, notice: 'the model returned no text — try again.' }
+              return { ...turn, notice: 'the model returned no text, try again.' }
             }
             return turn
           })
@@ -176,7 +176,7 @@ export function useChat() {
           }
           patchTurn(id, (turn) => ({
             ...turn,
-            notice: `the demo is unavailable — ${errorMessage(err)}`,
+            notice: `the demo is unavailable: ${errorMessage(err)}`,
           }))
         })
         .finally(() => {

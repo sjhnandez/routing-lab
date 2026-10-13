@@ -6,8 +6,12 @@ Covers: the chat section renders on https://lab.superseb.xyz; one real message
 page shows EITHER streamed reply text (answer or thinking block) plus the
 attribution line, OR a friendly mapped state (rate/busy limit, pools cooling
 down, paused, router error) - the check stays green on the friendly branch
-because the free pools may legitimately be saturated. Asserts no page or
-console errors and captures docs/e2e/10-chat.png.
+because the free pools may legitimately be saturated. When a real reply
+arrives the attribution line must read "served by <model> · <n>ms"; the raw
+SSE body of the page's own POST /api/chat response is inspected read-side so
+that, whenever the meta frame carried a concrete ``model_name``, the line is
+not allowed to render the free-chat alias. Asserts no page or console errors
+and captures docs/e2e/10-chat.png.
 
 Run from the repo root on the host (the image ships the browsers but not the
 Python packages, so they are installed on the fly; the tag must stay
@@ -47,6 +51,11 @@ FRIENDLY_RE = re.compile(
     r"returned an error|unavailable|no text",
     re.IGNORECASE,
 )
+
+# Attribution shape as rendered: "served by <model> · <n>ms" (middle dot).
+ATTRIBUTION_RE = re.compile(r"served by .+ · \d+ms")
+# meta frame's model_name inside the captured SSE body: "model_name":".."|null
+META_MODEL_RE = re.compile(r'"model_name":\s*(?:"([^"]*)"|null)')
 
 # Cloudflare's Web Analytics injection; matches the whole injected <script> tag.
 BEACON_TAG_RE = re.compile(r"<script[^>]*cloudflareinsights[^>]*>\s*</script>")
@@ -141,6 +150,16 @@ def run() -> int:
             lambda req: failed_requests.append(f"{req.url} :: {req.failure}"),
         )
 
+        # The page's own POST /api/chat response (SSE) is kept so its terminal
+        # meta frame can be read back once the turn finished.
+        chat_responses: list = []
+
+        def on_response(response) -> None:
+            if response.request.method == "POST" and response.url.endswith("/api/chat"):
+                chat_responses.append(response)
+
+        page.on("response", on_response)
+
         try:
             # ------------------------------------------------------------------
             # Step 1: load the live site; the chat card renders with input,
@@ -230,6 +249,45 @@ def run() -> int:
                 f"outcome={outcome or 'timeout'} after {elapsed:.0f}s; {detail}",
             )
 
+            # ------------------------------------------------------------------
+            # Step 4: attribution names the served model. Every real reply must
+            # match "served by <model> · <n>ms"; when the captured meta frame
+            # carried a concrete model_name, the free-chat alias must not be
+            # the rendered name. Skipped (green) on the friendly-state branch.
+            # ------------------------------------------------------------------
+            attribution_ok = True
+            attribution_detail = f"skipped (outcome={outcome or 'timeout'})"
+            if outcome == "reply":
+                attribution = visible_text(page, "[data-testid='chat-attribution']")
+                shape_ok = bool(ATTRIBUTION_RE.search(attribution))
+                meta_model_name = None
+                meta_parsed = False
+                if chat_responses:
+                    try:
+                        raw = chat_responses[-1].text()
+                    except Exception:
+                        raw = ""
+                    match = META_MODEL_RE.search(raw or "")
+                    if match:
+                        meta_parsed = True
+                        meta_model_name = match.group(1)
+                alias_ok = True
+                if meta_parsed and meta_model_name and meta_model_name != "free-chat":
+                    alias_ok = f"served by {meta_model_name}" in attribution and (
+                        "served by free-chat" not in attribution
+                    )
+                attribution_ok = shape_ok and alias_ok
+                attribution_detail = (
+                    f"attribution={attribution!r} shape={shape_ok} meta_parsed={meta_parsed} "
+                    f"meta_model_name={meta_model_name!r} alias_ok={alias_ok}"
+                )
+            check(
+                4,
+                "attribution names the served model (served by <model> · Nms, not the alias)",
+                attribution_ok,
+                attribution_detail,
+            )
+
             shot = save_shot(page)
             print(f"  screenshot: {shot}", flush=True)
 
@@ -244,10 +302,10 @@ def run() -> int:
             browser.close()
 
         # ----------------------------------------------------------------------
-        # Step 4: no page or console errors during the whole run.
+        # Step 5: no page or console errors during the whole run.
         # ----------------------------------------------------------------------
         check(
-            4,
+            5,
             "no page or console errors",
             not console_errors and not page_errors,
             f"console={len(console_errors)} pageerror={len(page_errors)} "

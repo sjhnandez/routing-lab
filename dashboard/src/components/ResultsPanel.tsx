@@ -300,7 +300,7 @@ function EmptyState() {
     <div className="p-6 sm:p-8">
       <p className="text-sm text-muted">No runs recorded yet.</p>
       <p className="mt-1 text-xs text-dim">
-        Click “Run experiment” above — the first report lands here when the battery finishes.
+        Click “Run experiment” above: the first report lands here when the battery finishes.
       </p>
     </div>
   )

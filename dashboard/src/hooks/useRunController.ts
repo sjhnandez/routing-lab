@@ -215,7 +215,7 @@ export function useRunController({ onRunFinished }: UseRunControllerOptions) {
             terminalRef.current = true
             source.close()
             sourceRef.current = null
-            setError('the live event stream dropped — showing the latest report instead')
+            setError('the live event stream dropped: showing the latest report instead')
             setPhase({ kind: 'idle' })
             onRunFinished()
           }
@@ -242,7 +242,7 @@ export function useRunController({ onRunFinished }: UseRunControllerOptions) {
           setError(
             err instanceof ApiError
               ? err.message
-              : `unable to reach the lab API — ${errorMessage(err)}`,
+              : `unable to reach the lab API: ${errorMessage(err)}`,
           )
         }
       }

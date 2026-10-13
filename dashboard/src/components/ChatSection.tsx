@@ -8,9 +8,9 @@ import { Reveal } from './Reveal'
 /** Client mirror of the server's LAB_CHAT_MAX_CHARS default. */
 const MAX_CHARS = 400
 
-/** "served by {group} · {latency_ms}ms[, n retry/retries][, n fallback(s)]". */
+/** "served by {model_name|group} · {latency_ms}ms[, n retry/retries][, n fallback(s)]". */
 function attributionLine(meta: ChatMeta): string {
-  let line = `served by ${meta.served_by ?? 'unknown'}`
+  let line = `served by ${meta.model_name ?? meta.served_by ?? 'unknown'}`
   if (meta.latency_ms !== null) line += ` · ${meta.latency_ms}ms`
   const retries = meta.attempted_retries ?? 0
   if (retries > 0) line += `, ${retries} ${retries === 1 ? 'retry' : 'retries'}`
@@ -36,9 +36,9 @@ export function ChatSection() {
   let buttonLabel = 'Send'
   if (streaming) buttonLabel = 'Streaming…'
   else if (cooldownReason === 'rate_limited') {
-    buttonLabel = `Rate limited — ${cooldownRemainingS ?? 0}s`
+    buttonLabel = `Rate limited - ${cooldownRemainingS ?? 0}s`
   } else if (cooldownReason === 'busy') {
-    buttonLabel = `Busy — ${cooldownRemainingS ?? 0}s`
+    buttonLabel = `Busy - ${cooldownRemainingS ?? 0}s`
   }
 
   return (
@@ -50,7 +50,7 @@ export function ChatSection() {
               Try the router
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
-              Send a message through the real gateway behind this server — free-tier pools handle
+              Send a message through the real gateway behind this server: free-tier pools handle
               it live, and every reply shows which deployment served it.
             </p>
 
@@ -62,6 +62,7 @@ export function ChatSection() {
                   !turn.answer &&
                   !turn.reasoning &&
                   !turn.notice
+                const attribution = turn.meta ? attributionLine(turn.meta) : null
                 return (
                   <div key={turn.id} className="space-y-2">
                     <p className="ml-auto w-fit max-w-[85%] rounded-2xl border border-line bg-surface/60 px-3.5 py-2.5 text-sm whitespace-pre-wrap text-ink">
@@ -102,12 +103,13 @@ export function ChatSection() {
                           {turn.notice}
                         </p>
                       ) : null}
-                      {turn.meta ? (
+                      {attribution !== null ? (
                         <p
                           data-testid="chat-attribution"
-                          className="font-mono text-[11px] text-dim"
+                          title={attribution}
+                          className="font-mono text-[11px] break-words text-dim"
                         >
-                          {attributionLine(turn.meta)}
+                          {attribution}
                         </p>
                       ) : null}
                       {awaitingFirstFrame ? (

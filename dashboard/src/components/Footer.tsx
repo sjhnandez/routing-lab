@@ -29,7 +29,7 @@ export function Footer() {
           </div>
         </div>
         <p className="mt-6 text-xs text-dim">
-          MIT licensed. Every number on this page comes from a pinned-image run of the runner —
+          MIT licensed. Every number on this page comes from a pinned-image run of the runner:
           nothing here is mocked for display.
         </p>
       </div>
