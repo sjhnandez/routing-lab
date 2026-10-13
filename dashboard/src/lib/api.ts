@@ -1,13 +1,13 @@
 import type {
-  FleetSummary,
-  HistoryEntry,
-  LabDocs,
-  LabHealth,
-  Report,
-  RunRejectionBody,
-  RunRejectionReason,
-  StageEvent,
-  StageName,
+    FleetSummary,
+    HistoryEntry,
+    LabDocs,
+    LabHealth,
+    Report,
+    RunRejectionBody,
+    RunRejectionReason,
+    StageEvent,
+    StageName,
 } from './types'
 
 /** API base: same-origin `/api` by default, overridable with VITE_API_BASE. */

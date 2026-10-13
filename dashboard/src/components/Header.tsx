@@ -2,6 +2,7 @@ import { GITHUB_URL } from '../lib/ui'
 import { GitHubIcon } from './Icons'
 
 const sectionLinks = [
+  { href: '#overview', label: 'Overview' },
   { href: '#results', label: 'Results' },
   { href: '#history', label: 'History' },
   { href: '#method', label: 'Method' },
@@ -52,8 +53,15 @@ export function Header() {
             <span className="gradient-text">routing-lab</span>
           </h1>
           <p className="mt-5 max-w-2xl font-display text-lg text-muted sm:text-xl">
-            Eight hard-assertion scenarios that make a pinned LiteLLM router prove its retry,
-            cooldown and fallback semantics — click once and watch them pass.
+            Every AI request on this server runs through one self-hosted LiteLLM router. When an
+            upstream provider stalls, rate-limits, or fails, the router decides what the client
+            sees: a silent reroute, a retry, or an error.
+          </p>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-dim sm:text-base">
+            The failover rules live in configuration, but their consequences are not obvious -
+            mid-stream stalls cannot be un-sent, and 503 retryability depends on pool topology.
+            This lab pins those behaviors down with eight fault-injection scenarios and runs them
+            on demand against a mocked upstream.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <a

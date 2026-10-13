@@ -1,10 +1,11 @@
-import { useCallback } from 'react'
 import { MotionConfig } from 'motion/react'
-import { Footer } from './components/Footer'
+import { useCallback } from 'react'
 import { FleetSection } from './components/FleetSection'
+import { Footer } from './components/Footer'
 import { Header } from './components/Header'
 import { HistoryTable } from './components/HistoryTable'
 import { MethodSection } from './components/MethodSection'
+import { OverviewSection } from './components/OverviewSection'
 import { ResultsPanel } from './components/ResultsPanel'
 import { RunPanel } from './components/RunPanel'
 import { Section } from './components/Section'
@@ -48,6 +49,7 @@ export default function App() {
       </a>
       <Header />
       <main id="main">
+        <OverviewSection />
         <RunPanel
           phase={run.phase}
           cooldownRemainingS={run.cooldownRemainingS}

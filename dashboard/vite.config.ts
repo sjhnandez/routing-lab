@@ -1,6 +1,6 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 
 // The dashboard is served same-origin behind the lab API (base /api by
 // default; override with VITE_API_BASE). `npm run dev` proxies /api to the

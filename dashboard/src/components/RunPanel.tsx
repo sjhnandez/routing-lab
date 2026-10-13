@@ -72,9 +72,8 @@ export function RunPanel({
                   Run the battery
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
-                  One click starts the eight-scenario failover battery against the pinned LiteLLM
-                  image. Stages stream live from the lab; the finished report lands in Results
-                  below.
+                  One click runs the eight-scenario battery against the pinned LiteLLM image.
+                  Stages stream live below; the report lands in Results.
                 </p>
                 <div className="mt-4 flex items-center gap-2 font-mono text-[11px] text-dim">
                   <span className={`h-1.5 w-1.5 rounded-full ${healthDot}`} />

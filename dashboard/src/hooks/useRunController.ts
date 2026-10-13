@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  ApiError,
-  fetchHealth,
-  parseStageEvent,
-  runEventsUrl,
-  RunRejectedError,
-  startRun,
+    ApiError,
+    fetchHealth,
+    parseStageEvent,
+    runEventsUrl,
+    RunRejectedError,
+    startRun,
 } from '../lib/api'
 import { errorMessage } from '../lib/format'
 import type { LabHealth, StageEvent } from '../lib/types'

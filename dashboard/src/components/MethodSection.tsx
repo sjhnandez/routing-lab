@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
+import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { fetchDocs } from '../lib/api'
 import { errorMessage } from '../lib/format'
 import type { LabDocs } from '../lib/types'
 import { buttonGhost, card, cardGlow } from '../lib/ui'
-import { RefreshIcon } from './Icons'
+import { ChevronDownIcon, RefreshIcon } from './Icons'
 import { Section } from './Section'
 
 const mdComponents: Components = {
@@ -50,7 +50,7 @@ const mdComponents: Components = {
       </code>
     ),
   pre: ({ children }) => (
-    <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted">
+    <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted [&>code]:border-0 [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-[1em] [&>code]:rounded-none">
       {children}
     </pre>
   ),
@@ -131,13 +131,17 @@ export function MethodSection() {
                 {docs.methodology}
               </ReactMarkdown>
             </div>
-            <div className="mt-10 border-t border-line/60 pt-2">
+            <details className="group mt-10 border-t border-line/60">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 py-4 font-display text-lg font-semibold tracking-tight transition hover:text-accent [&::-webkit-details-marker]:hidden">
+                Scenario catalog - every claim and its hard assertions
+                <ChevronDownIcon className="h-4 w-4 shrink-0 text-dim transition group-open:rotate-180" />
+              </summary>
               <div className="max-w-3xl">
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                   {docs.scenarios}
                 </ReactMarkdown>
               </div>
-            </div>
+            </details>
           </div>
         ) : null}
       </div>
