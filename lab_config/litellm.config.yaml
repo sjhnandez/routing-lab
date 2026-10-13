@@ -1,0 +1,33 @@
+# Contract under test: router_settings copied VERBATIM from apps/litellm/config.yaml lines 101-132 (production, 2026-10-13). Lab-specific model_list and quick/full profile templating are added by a later task.
+router_settings:
+  routing_strategy: "simple-shuffle"    # Distribute requests across free deployments
+  num_retries: 5                        # Up to 5 retries to find an available endpoint
+  cooldown_time: 120                    # Cool down an unavailable/rate-limited endpoint for 2 mins
+  allowed_fails: 0                      # Immediately cool down on first failure
+  retry_after: 1                        # Wait 1s before switching to the next deployment
+  # Kill hung requests fast, then retry/reroute (verified with a stalling fake
+  # upstream: stream kills reroute when no content was sent yet; non-stream
+  # kills retry and reroute. A steady stream is never killed - this is a
+  # SILENCE gap limit, not a total-duration cap, so long answers are safe).
+  timeout: 20                           # Non-stream: kill after 20s with no response
+  stream_timeout: 20                    # Stream: kill after 20s of silence (no chunks)
+  allowed_fails_policy:
+    RateLimitErrorAllowedFails: 0          # HTTP 429
+    ServiceUnavailableErrorAllowedFails: 0  # HTTP 503 (high demand / capacity spikes)
+    InternalServerErrorAllowedFails: 0     # HTTP 500 / 502 / 504
+    BadGatewayErrorAllowedFails: 0         # HTTP 502
+    TimeoutErrorAllowedFails: 0            # HTTP 408 / request timeouts
+  retry_policy:
+    RateLimitErrorRetries: 5
+    InternalServerErrorRetries: 5
+    TimeoutErrorRetries: 3
+  # Reroute recoverable failures to a sibling pool instead of surfacing them.
+  # This is what catches streaming errors that arrive BEFORE the first content
+  # chunk (e.g. OpenRouter "provider_unavailable" arriving mid-stream) - without
+  # a fallback chain litellm returns the raw provider error to the client.
+  # Lookup order for the complexity-router alias is: the tier the router picked
+  # (text-chat / vision-chat) first, then the alias name (free-chat).
+  fallbacks:
+    - text-chat: ["vision-chat"]
+    - vision-chat: ["text-chat"]
+    - free-chat: ["text-chat", "vision-chat"]
