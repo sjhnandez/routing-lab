@@ -524,3 +524,17 @@ def test_spa_serves_assets_and_falls_back_to_index(tmp_path):
     for bad in ("/..%2Fsecret.txt", "/%2e%2e%2fsecret.txt"):
         resp = client.get(bad)
         assert "TOP-SECRET" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# deploy invariants
+# ---------------------------------------------------------------------------
+
+
+def test_dockerfile_pins_single_uvicorn_worker():
+    """The POST /api/run gate check-then-write is race-free only with one
+    worker (see post_run); the Dockerfile must keep the explicit pin."""
+    dockerfile = Path(__file__).resolve().parents[1] / "api" / "Dockerfile"
+    content = dockerfile.read_text(encoding="utf-8")
+    compact = "".join(content.split())
+    assert '"--workers","1"' in compact

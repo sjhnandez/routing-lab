@@ -57,17 +57,6 @@ export interface ServedBy {
   hits: number
 }
 
-export interface MockedHit {
-  ts: number
-  model: string
-  mode: string
-  stream: boolean
-  status: number
-  outcome?: string
-  duration_s?: number
-  chunks_sent?: number
-}
-
 export type ScenarioStatus = 'pass' | 'fail' | 'error'
 
 export interface ScenarioReport {
@@ -80,7 +69,6 @@ export interface ScenarioReport {
   assertions: AssertionResult[]
   timeline: TimelineEntry[]
   served_by: ServedBy[]
-  mocked_hits: MockedHit[]
 }
 
 export interface ReportSummary {

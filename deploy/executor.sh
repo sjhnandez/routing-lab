@@ -12,9 +12,14 @@
 #   ./deploy/executor.sh --once    # single pass; exit 0 = nothing to do or run
 #                                  # finished green, 1 = the run failed
 #
-# Safe to run from anywhere (repo root resolved from the script path) and
-# from cron. Single instance enforced via flock on queue/.executor.lock.
-# Logs to queue/executor.log (and stdout). Battery hard timeout:
+# Safe to run from anywhere (repo root resolved from the script path; every
+# compose path is absolute) and from cron. Single instance enforced via flock
+# on queue/.executor.lock. On startup, under the lock, any run left in
+# "running" by a dead executor (SIGKILL/OOM/reboot) is recovered: error event +
+# failed status + best-effort compose down for orphaned containers.
+# Logs to queue/executor.log (and stdout) and self-caps that file at ~5 MB
+# (keeps the last ~1 MB); evicting old queue records and OS-level logrotate
+# are deployment-phase items. Battery hard timeout:
 # EXECUTOR_BATTERY_TIMEOUT_S (default 300 s).
 
 set -u
@@ -29,15 +34,38 @@ LOCK_FILE="$QUEUE_DIR/.executor.lock"
 POLL_S="${EXECUTOR_POLL_S:-5}"
 BATTERY_TIMEOUT_S="${EXECUTOR_BATTERY_TIMEOUT_S:-300}"
 
-COMPOSE=(docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml)
+# Absolute paths: the executor may run from cron/anywhere, never assume cwd.
+COMPOSE=(docker compose --env-file "$REPO_ROOT/deploy/pinned-versions.env" -f "$REPO_ROOT/deploy/docker-compose.dev.yml")
 # "[PASS] scenario 3 quick-failover (1.96s)" / "[FAIL] ..." lines from runner.
 SCENARIO_RE='^\[(PASS|FAIL)\] scenario ([0-9]+) ([a-z0-9-]+) \(([0-9.]+)s\)$'
+# Final "report: /app/reports/<report-id>.json" line of the runner console
+# summary: the primary source for the finished run's report id.
+REPORT_RE='^report: .*/([0-9]{8}-[0-9]{6}-[a-z0-9][a-z0-9-]{0,31})\.json$'
+
+# log() self-cap: above LOG_MAX_BYTES the log is truncated to its last
+# LOG_KEEP_BYTES so a long-lived cron executor cannot fill the disk.
+LOG_MAX_BYTES=$((5 * 1024 * 1024))
+LOG_KEEP_BYTES=$((1024 * 1024))
 
 RUN_ACTIVE=0
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
 log() {
+    if [[ -f "$LOG_FILE" ]]; then
+        local size
+        size="$(stat -c %s "$LOG_FILE" 2>/dev/null || printf '0')"
+        if [[ "$size" =~ ^[0-9]+$ ]] && ((size > LOG_MAX_BYTES)); then
+            if tail -c "$LOG_KEEP_BYTES" "$LOG_FILE" >"$LOG_FILE.tmp" &&
+                mv -f "$LOG_FILE.tmp" "$LOG_FILE"; then
+                printf 'executor: %s log capped to last %s bytes\n' \
+                    "$(now_iso)" "$LOG_KEEP_BYTES" >>"$LOG_FILE"
+            else
+                rm -f "$LOG_FILE.tmp"
+                printf 'WARN: could not cap %s\n' "$LOG_FILE" >&2
+            fi
+        fi
+    fi
     printf '%s executor: %s\n' "$(now_iso)" "$*" | tee -a "$LOG_FILE"
 }
 
@@ -84,6 +112,34 @@ find_pending() {
         fi
     done
     [[ -n "$best" ]] && printf '%s' "$best"
+}
+
+# Recover runs left in "running" by a dead executor (SIGKILL/OOM/reboot
+# between the running write and a terminal status). Only safe with the flock
+# held: that guarantees no other executor is mid-run. Appends an error event,
+# flips the entry to failed and best-effort tears down any orphaned
+# `docker compose run` container the dead executor left behind.
+sweep_stale_running() {
+    local f base st id stale=0
+    for f in "$QUEUE_DIR"/*.json; do
+        [[ -e "$f" ]] || continue
+        base="$(basename "$f")"
+        [[ "$base" =~ ^[0-9a-f]{32}\.json$ ]] || continue
+        st="$(jq -r '.status // empty' "$f" 2>/dev/null)"
+        [[ "$st" == "running" ]] || continue
+        id="${base%.json}"
+        stale=1
+        append_event "$id" --arg stage error \
+            --arg message "stale_running: previous executor died mid-run" \
+            '{ts:$ts,stage:$stage,message:$message}'
+        set_status "$id" failed
+        log "recovered stale running run $id (marked failed)"
+    done
+    if ((stale)); then
+        log "stale-run sweep: best-effort compose down for orphaned containers"
+        LAB_PROFILE=quick "${COMPOSE[@]}" down >>"$LOG_FILE" 2>&1 ||
+            log "WARN: stale-run sweep compose down failed"
+    fi
 }
 
 cleanup() {
@@ -148,12 +204,15 @@ process_run() { # <id>  -> 0 done, 1 failed
         return 1
     fi
 
-    # Stream the battery; emit one "scenario" event per PASS/FAIL line.
-    # PYTHONUNBUFFERED keeps the runner's stdout line-buffered so events
-    # arrive live over SSE. "-T" + stdin from /dev/null keep `compose run`
-    # from holding the attach open on a stdin that never EOFs (cron/CI/script
-    # contexts). Hard timeout for the whole battery.
-    local line
+    # Stream the battery; emit one "scenario" event per PASS/FAIL line and
+    # capture the runner's own "report: <path>" line (primary source for the
+    # new report id; the while-loop body runs in a subshell, so the id is
+    # staged through a temp file). PYTHONUNBUFFERED keeps the runner's stdout
+    # line-buffered so events arrive live over SSE. "-T" + stdin from
+    # /dev/null keep `compose run` from holding the attach open on a stdin
+    # that never EOFs (cron/CI/script contexts). Hard timeout for the battery.
+    local line streamed_report_file streamed_report_id=""
+    streamed_report_file="$(mktemp 2>/dev/null)" || streamed_report_file=""
     LAB_PROFILE=quick timeout --signal=TERM --kill-after=30 "$BATTERY_TIMEOUT_S" \
         "${COMPOSE[@]}" --profile run run --rm -T -e PYTHONUNBUFFERED=1 runner \
         </dev/null 2>&1 |
@@ -165,12 +224,21 @@ process_run() { # <id>  -> 0 done, 1 failed
                     --arg name "${BASH_REMATCH[3]}" \
                     --arg status "${BASH_REMATCH[1],,}" \
                     '{ts:$ts,stage:"scenario",scenario:$scenario,name:$name,status:$status}'
+            elif [[ -n "$streamed_report_file" && "$line" =~ $REPORT_RE ]]; then
+                printf '%s' "${BASH_REMATCH[1]}" >"$streamed_report_file"
             fi
         done
     rc=${PIPESTATUS[0]}
+    if [[ -n "$streamed_report_file" ]]; then
+        streamed_report_id="$(cat "$streamed_report_file" 2>/dev/null)"
+        rm -f "$streamed_report_file"
+    fi
 
+    # Primary: the runner's own report line; fallback: newest-file diff.
     after_report="$(newest_report)"
-    if [[ -n "$after_report" && "$after_report" != "$before_report" ]]; then
+    if [[ -n "$streamed_report_id" ]]; then
+        report_id="$streamed_report_id"
+    elif [[ -n "$after_report" && "$after_report" != "$before_report" ]]; then
         report_id="$(basename "$after_report" .json)"
     fi
 
@@ -233,6 +301,10 @@ main() {
         log "another executor instance holds the lock; exiting"
         exit 0
     fi
+
+    # We own the lock: no other executor can be mid-run, so any "running"
+    # entry is stale (its executor died before writing a terminal status).
+    sweep_stale_running
 
     if [[ "${1:-}" == "--once" ]]; then
         run_once

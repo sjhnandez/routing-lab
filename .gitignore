@@ -11,4 +11,5 @@ queue/*
 dashboard/node_modules/
 dashboard/dist/
 prober/history/*
+!prober/history/.gitkeep
 .npmcache/

@@ -506,6 +506,11 @@ def create_app(config: Optional[Config] = None) -> FastAPI:
 
     @app.post("/api/run")
     async def post_run(request: Request) -> JSONResponse:
+        # The gate check-then-write below is race-free only with a single
+        # uvicorn worker: the queue is read here and the request file is
+        # written further down with no await in between, so one event loop
+        # cannot interleave two handlers. api/Dockerfile pins --workers 1;
+        # scaling workers requires a real cross-process lock first.
         if not cfg.trigger_enabled:
             return JSONResponse({"reason": "trigger_disabled"}, status_code=503)
 

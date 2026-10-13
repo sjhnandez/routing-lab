@@ -20,12 +20,14 @@ function scrollToResults() {
 
 export default function App() {
   const data = useLabData()
-  const { refreshLatest, refreshHistory, viewReport } = data
+  const { refreshLatest, refreshHistory, showLatest, viewReport } = data
 
   const onRunFinished = useCallback(() => {
-    void refreshLatest()
+    // Drop any historical report the user had open so the fresh results are
+    // visible, then pull the new report + history row.
+    showLatest()
     void refreshHistory()
-  }, [refreshLatest, refreshHistory])
+  }, [showLatest, refreshHistory])
 
   const run = useRunController({ onRunFinished })
 
