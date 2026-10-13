@@ -1,0 +1,4 @@
+# lab-api runtime dependencies, pinned (aligned with mock_upstream/requirements.txt
+# and tests/requirements.txt). The API is stdlib + fastapi/uvicorn only.
+fastapi==0.143.0
+uvicorn==0.54.0

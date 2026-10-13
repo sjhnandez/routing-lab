@@ -1,5 +1,7 @@
-# routing-lab dev stack: mock-upstream + litellm-lab + runner (profile "run").
-# All services are internal-only (no host ports); they share the default network.
+# routing-lab dev stack: mock-upstream + litellm-lab + runner (profile "run") + lab-api (profile "api").
+# Lab services are internal-only (no host ports); they share the default network.
+# lab-api is the only service with a host port (127.0.0.1:3003) and has no
+# docker access; the host-side deploy/executor.sh owns the queue -> battery flow.
 # Run from the repo root:
 #   up (quick):  LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml up -d
 #   up (full):   LAB_PROFILE=full  docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml up -d
@@ -40,4 +42,22 @@ services:
       - ../deploy:/deploy:ro
     depends_on:
       - litellm-lab
+    restart: "no"
+
+  # Dashboard backend: run trigger + queue/report/docs API. Localhost-only
+  # (127.0.0.1:3003). Deliberately has no docker.sock: POST /api/run drops a
+  # request into queue/ and the host-side deploy/executor.sh runs it.
+  # Start: LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.dev.yml --profile api up -d --build lab-api
+  lab-api:
+    profiles: ["api"]
+    build: ../api
+    ports:
+      - "127.0.0.1:3003:8000"
+    volumes:
+      - ../dashboard/dist:/app/static:ro
+      - ../reports:/app/reports:ro
+      - ../queue:/app/queue
+      - ../docs:/app/docs:ro
+    environment:
+      - LAB_TRIGGER=${LAB_TRIGGER:-on}
     restart: "no"
