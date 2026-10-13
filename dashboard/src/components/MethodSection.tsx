@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Children, isValidElement, useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -7,7 +8,17 @@ import { errorMessage } from '../lib/format'
 import type { LabDocs } from '../lib/types'
 import { buttonGhost, card, cardGlow } from '../lib/ui'
 import { ChevronDownIcon, RefreshIcon } from './Icons'
+import { Mermaid } from './Mermaid'
 import { Section } from './Section'
+
+/** True for the `<code>` element of a fenced ```mermaid block. */
+function isMermaidCode(child: ReactNode): boolean {
+  return (
+    isValidElement<{ className?: string }>(child) &&
+    typeof child.props.className === 'string' &&
+    child.props.className.includes('language-mermaid')
+  )
+}
 
 const mdComponents: Components = {
   h1: ({ children }) => (
@@ -42,18 +53,23 @@ const mdComponents: Components = {
     </a>
   ),
   code: ({ className, children }) =>
-    className ? (
+    className?.includes('language-mermaid') ? (
+      <Mermaid chart={String(children).trim()} />
+    ) : className ? (
       <code className="font-mono">{children}</code>
     ) : (
       <code className="rounded border border-line bg-bg-soft px-1.5 py-0.5 font-mono text-[0.8em] text-ink">
         {children}
       </code>
     ),
-  pre: ({ children }) => (
-    <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted [&>code]:border-0 [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-[1em] [&>code]:rounded-none">
-      {children}
-    </pre>
-  ),
+  pre: ({ children }) =>
+    Children.toArray(children).some(isMermaidCode) ? (
+      <>{children}</>
+    ) : (
+      <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted [&>code]:border-0 [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-[1em] [&>code]:rounded-none">
+        {children}
+      </pre>
+    ),
   blockquote: ({ children }) => (
     <blockquote className="mt-4 border-l-2 border-accent/60 pl-4 text-sm leading-relaxed text-dim">
       {children}

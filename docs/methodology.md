@@ -8,21 +8,26 @@ a healthy stream alive?
 
 ## Architecture
 
-Three short-lived containers on one internal Docker network (no host ports):
+Three short-lived containers on one internal Docker network (no host ports).
 
-    +-------------------- routing-lab-dev network -----------------------+
-    |                                                                    |
-    |  runner  ---- POST /v1/chat/completions ---->  litellm-lab         |
-    |  (scenario battery)                            (LiteLLM proxy,     |
-    |      |                                          pinned image,      |
-    |      |                                          lab_config/        |
-    |      |                                          router.<profile>.yaml)
-    |      |                                              |              |
-    |      |  GET/DELETE /__hits (journal)                  | openai/<mode>
-    |      +---------------------------->  mock-upstream <--+             |
-    |                                      (deterministic fault modes,   |
-    |                                       JSON hit journal)            |
-    +--------------------------------------------------------------------+
+Battery data path - one scenario turn, driven by the runner:
+
+```mermaid
+flowchart LR
+  R["runner<br/>scenario battery"] -->|"POST /v1/chat/completions"| L["litellm-lab<br/>pinned LiteLLM proxy"]
+  L -->|"openai/&lt;mode&gt;"| M["mock-upstream<br/>8 fault modes"]
+  R -. "GET/DELETE /__hits (attribution)" .-> M
+```
+
+Interactive pipeline - a dashboard click to a finished report:
+
+```mermaid
+flowchart LR
+  B["dashboard<br/>(browser)"] -->|"POST /api/run"| A["lab-api<br/>gates + queue"]
+  A -->|"request file"| Q[("queue/")]
+  Q --> E["host executor<br/>cron, every minute"]
+  E -->|"compose run"| R2["runner battery"]
+```
 
 - `mock_upstream/` - OpenAI-compatible fake provider. The requested model
   string selects a fault mode (`healthy`, `stall-pre`, `stall-mid`,
