@@ -110,8 +110,19 @@ jobs:
           const py = JSON.parse(fs.readFileSync('coverage-artifacts/cov-python/coverage.json', 'utf8'))
           const dash = JSON.parse(fs.readFileSync('coverage-artifacts/cov-dashboard/coverage-summary.json', 'utf8'))
 
-          fs.writeFileSync('/tmp/coverage-python.json', JSON.stringify(shields('python coverage', Math.round(py.totals.percent_covered))) + '\n')
-          fs.writeFileSync('/tmp/coverage-dashboard.json', JSON.stringify(shields('dashboard coverage', Math.round(dash.total.lines.pct))) + '\n')
+          const pyPct = Math.round(py.totals.percent_covered)
+          const dashPct = Math.round(dash.total.lines.pct)
+          if (!Number.isFinite(pyPct)) {
+            console.error(`Invalid python coverage percent: ${py.totals.percent_covered}`)
+            process.exit(1)
+          }
+          if (!Number.isFinite(dashPct)) {
+            console.error(`Invalid dashboard coverage percent: ${dash.total.lines.pct}`)
+            process.exit(1)
+          }
+
+          fs.writeFileSync('/tmp/coverage-python.json', JSON.stringify(shields('python coverage', pyPct)) + '\n')
+          fs.writeFileSync('/tmp/coverage-dashboard.json', JSON.stringify(shields('dashboard coverage', dashPct)) + '\n')
           EOF
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
