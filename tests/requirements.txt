@@ -2,6 +2,7 @@
 # mock_upstream/requirements.txt (fastapi, uvicorn) and runner/requirements.txt
 # (httpx, PyYAML) so the suite exercises the same versions as the lab images.
 pytest==8.4.2
+pytest-cov==7.1.0
 fastapi==0.143.0
 uvicorn==0.54.0
 httpx==0.28.1

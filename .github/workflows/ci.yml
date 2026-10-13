@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   unit:
     name: unit
@@ -22,8 +25,123 @@ jobs:
       - name: Install test dependencies
         run: pip install -r tests/requirements.txt
 
-      - name: Run unit tests
-        run: python -m pytest tests/ -q
+      - name: Run unit tests with coverage
+        run: >-
+          python -m pytest tests/ -q
+          --cov=api --cov=prober --cov=runner --cov=mock_upstream
+          --cov-report=term --cov-report=json:coverage.json
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov-python
+          path: coverage.json
 
       - name: Validate compose config
         run: docker compose -f deploy/docker-compose.dev.yml --env-file deploy/pinned-versions.env config -q
+
+  dashboard:
+    name: dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dashboard dependencies
+        run: npm ci
+        working-directory: dashboard
+
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: dashboard
+
+      - name: Build
+        run: npm run build
+        working-directory: dashboard
+
+      - name: Unit tests with coverage
+        run: npm run test:coverage
+        working-directory: dashboard
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cov-dashboard
+          path: dashboard/coverage/coverage-summary.json
+
+  badges:
+    name: badges
+    needs: [unit, dashboard]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download coverage summaries
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-artifacts
+
+      # Self-contained shields.io endpoint badges: BOTH files are written and
+      # pushed in a single commit on the orphan `badges` branch (no races).
+      - name: Publish coverage badges
+        run: |
+          node <<'EOF'
+          const fs = require('fs')
+          const color = (pct) =>
+            pct >= 80 ? 'green' : pct >= 60 ? 'yellowgreen' : pct >= 40 ? 'yellow' : 'red'
+          const shields = (label, pct) => ({
+            schemaVersion: 1,
+            label,
+            message: `${pct}%`,
+            color: color(pct),
+          })
+
+          const py = JSON.parse(fs.readFileSync('coverage-artifacts/cov-python/coverage.json', 'utf8'))
+          const dash = JSON.parse(fs.readFileSync('coverage-artifacts/cov-dashboard/coverage-summary.json', 'utf8'))
+
+          fs.writeFileSync('/tmp/coverage-python.json', JSON.stringify(shields('python coverage', Math.round(py.totals.percent_covered))) + '\n')
+          fs.writeFileSync('/tmp/coverage-dashboard.json', JSON.stringify(shields('dashboard coverage', Math.round(dash.total.lines.pct))) + '\n')
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout --orphan badges
+          git rm -rf .
+          cp /tmp/coverage-python.json /tmp/coverage-dashboard.json .
+          git add coverage-python.json coverage-dashboard.json
+          git commit -m 'chore: update coverage badges'
+          git push -f origin badges
+
+  deploy:
+    name: deploy
+    needs: [unit, dashboard]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: { group: deploy-routing-lab, cancel-in-progress: false }
+    steps:
+      - name: Prepare SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+          curl -fsSL -o "$RUNNER_TEMP/cloudflared" https://github.com/cloudflare/cloudflared/releases/download/2026.10.0/cloudflared-linux-amd64 && chmod +x "$RUNNER_TEMP/cloudflared"
+      - name: Deploy over Cloudflare Tunnel SSH
+        env:
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes \
+            -o "ProxyCommand=$RUNNER_TEMP/cloudflared access ssh --hostname %h --service-token-id $CF_ACCESS_CLIENT_ID --service-token-secret $CF_ACCESS_CLIENT_SECRET" \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -p ${{ vars.DEPLOY_PORT }} ${{ vars.DEPLOY_USER }}@${{ vars.DEPLOY_HOST }} \
+            deploy-routing-lab

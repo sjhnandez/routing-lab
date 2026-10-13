@@ -3,6 +3,8 @@
 routing-lab is a fault-injection testbench that proves LiteLLM router failover semantics, with hard evidence.
 
 [![CI](https://github.com/sjhnandez/routing-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/sjhnandez/routing-lab/actions/workflows/ci.yml)
+[![Python coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/sjhnandez/routing-lab/badges/coverage-python.json)](https://github.com/sjhnandez/routing-lab/actions/workflows/ci.yml)
+[![Dashboard coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/sjhnandez/routing-lab/badges/coverage-dashboard.json)](https://github.com/sjhnandez/routing-lab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Per battery run, three short-lived containers share one internal Docker network (no host ports): a scenario **runner** drives a digest-pinned **LiteLLM** proxy whose model groups point at a deterministic **mock upstream** with injectable fault modes (stalls, slow streams, 404/429/500/503, full saturation). Every scenario has a single claim under test and hard assertions evaluated from the client outcome plus the mock's hit journal. The battery exits non-zero if any assertion fails and writes a JSON report with the raw evidence.

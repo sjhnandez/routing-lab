@@ -10,6 +10,7 @@ queue/*
 !queue/.gitkeep
 dashboard/node_modules/
 dashboard/dist/
+dashboard/coverage/
 prober/history/*
 !prober/history/.gitkeep
 .npmcache/
