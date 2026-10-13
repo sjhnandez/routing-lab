@@ -1,0 +1,63 @@
+# routing-lab prod lab stack: mock-upstream + litellm-lab + runner (profile "run").
+# Same battery shape as docker-compose.dev.yml minus the dashboard API and host
+# ports: this is what the production executor runs against (from cron:
+# EXECUTOR_COMPOSE_FILE=deploy/docker-compose.lab.yml ./deploy/executor.sh --once).
+# The public trigger is quick-profile only, so litellm-lab always mounts
+# lab_config/router.quick.yaml; local dev keeps docker-compose.dev.yml with its
+# LAB_PROFILE switch. Every service is internal-only (no host ports) and
+# resource-capped; the executor tears the whole project down after each run.
+# LITELLM_IMAGE is digest-pinned in deploy/pinned-versions.env - pass it with
+# --env-file. Run from the repo root:
+#   up:      LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.lab.yml up -d
+#   down:    LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.lab.yml down
+#   battery: LAB_PROFILE=quick docker compose --env-file deploy/pinned-versions.env -f deploy/docker-compose.lab.yml --profile run run --rm runner
+
+name: routing-lab-lab
+
+services:
+  # Deterministic OpenAI-compatible mock upstream.
+  mock-upstream:
+    build: ../mock_upstream
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # LiteLLM proxy under test, quick profile only (prod trigger is quick-only).
+  litellm-lab:
+    image: ${LITELLM_IMAGE}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    volumes:
+      - ../lab_config/router.quick.yaml:/app/config.yaml:ro
+    depends_on:
+      - mock-upstream
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  # Scenario battery; run only via: docker compose --profile run run --rm runner.
+  runner:
+    profiles: ["run"]
+    build: ../runner
+    environment:
+      - LAB_BASE_URL=http://litellm-lab:4000
+      - LAB_PROFILE=quick
+      - LAB_MOCK_URL=http://mock-upstream:8000
+      - LAB_GIT_REV=${LAB_GIT_REV:-unknown}
+    volumes:
+      - ../reports:/app/reports
+      - ../lab_config:/lab_config:ro
+      - ../deploy:/deploy:ro
+    depends_on:
+      - litellm-lab
+    restart: "no"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M

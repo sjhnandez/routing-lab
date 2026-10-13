@@ -1,0 +1,6 @@
+# routing-lab prober - one live probe every 30 minutes (install: deploy/cron/README.md).
+# The master key stays in /home/server/stacks/apps/.env and is read at run time
+# into LITELLM_API_KEY (never stored in this crontab, never committed).
+# Runs from the repo root so prober/history resolves there; the daily-cap
+# guard and exit codes live in prober/README.md.
+*/30 * * * * cd /home/server/stacks/routing-lab && . /home/server/stacks/apps/.env && LITELLM_API_KEY="$LITELLM_MASTER_KEY" LITELLM_BASE_URL=http://127.0.0.1:4001 /home/server/stacks/routing-lab/.venv/bin/python -m prober >> prober/history/prober.log 2>&1

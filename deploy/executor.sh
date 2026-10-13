@@ -3,14 +3,19 @@
 #
 # Polls queue/<32hex>.json for the oldest "pending" request (created by the
 # lab-api container, which has NO docker access), runs the battery with the
-# dev compose stack, streams per-scenario results into queue/<id>.events.jsonl
-# (the lab-api replays/tails that file over SSE) and always tears the stack
-# down afterwards.
+# compose file selected by EXECUTOR_COMPOSE_FILE (default: the dev stack),
+# streams per-scenario results into queue/<id>.events.jsonl (the lab-api
+# replays/tails that file over SSE) and always tears the stack down afterwards.
 #
 # Usage:
 #   ./deploy/executor.sh           # poll loop every EXECUTOR_POLL_S (default 5)
 #   ./deploy/executor.sh --once    # single pass; exit 0 = nothing to do or run
 #                                  # finished green, 1 = the run failed
+#
+# EXECUTOR_COMPOSE_FILE picks the stack the battery runs against (relative
+# paths resolve against the repo root); default deploy/docker-compose.dev.yml,
+# the prod cron install sets deploy/docker-compose.lab.yml (see deploy/cron/).
+# A missing file is a hard error before anything else happens.
 #
 # Safe to run from anywhere (repo root resolved from the script path; every
 # compose path is absolute) and from cron. Single instance enforced via flock
@@ -34,8 +39,17 @@ LOCK_FILE="$QUEUE_DIR/.executor.lock"
 POLL_S="${EXECUTOR_POLL_S:-5}"
 BATTERY_TIMEOUT_S="${EXECUTOR_BATTERY_TIMEOUT_S:-300}"
 
+# Compose file for the battery, resolved against the repo root; prod points
+# EXECUTOR_COMPOSE_FILE at deploy/docker-compose.lab.yml (see deploy/cron/).
+COMPOSE_FILE="$REPO_ROOT/${EXECUTOR_COMPOSE_FILE:-deploy/docker-compose.dev.yml}"
+if [[ ! -f "$COMPOSE_FILE" ]]; then
+    printf 'ERROR: compose file not found: %s\n' "$COMPOSE_FILE" >&2
+    printf 'hint: set EXECUTOR_COMPOSE_FILE (default deploy/docker-compose.dev.yml)\n' >&2
+    exit 2
+fi
+
 # Absolute paths: the executor may run from cron/anywhere, never assume cwd.
-COMPOSE=(docker compose --env-file "$REPO_ROOT/deploy/pinned-versions.env" -f "$REPO_ROOT/deploy/docker-compose.dev.yml")
+COMPOSE=(docker compose --env-file "$REPO_ROOT/deploy/pinned-versions.env" -f "$COMPOSE_FILE")
 # "[PASS] scenario 3 quick-failover (1.96s)" / "[FAIL] ..." lines from runner.
 SCENARIO_RE='^\[(PASS|FAIL)\] scenario ([0-9]+) ([a-z0-9-]+) \(([0-9.]+)s\)$'
 # Final "report: /app/reports/<report-id>.json" line of the runner console

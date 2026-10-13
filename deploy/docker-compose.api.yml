@@ -1,0 +1,40 @@
+# routing-lab prod dashboard API: lab-api only.
+# Joins the apps stack's external network (apps_default) so the apps tunnel
+# can reach it at http://lab-api:8000 (terraform route lab.superseb.xyz ->
+# http://lab-api:8000; see /home/server/stacks/network/terraform). NO host
+# ports: public access is only through the tunnel. Like the dev stack it
+# deliberately has no docker.sock: POST /api/run drops a request into queue/
+# and the host-side deploy/executor.sh runs it (EXECUTOR_COMPOSE_FILE=
+# deploy/docker-compose.lab.yml). Run from the repo root:
+#   up:      docker compose -f deploy/docker-compose.api.yml up -d --build
+#   down:    docker compose -f deploy/docker-compose.api.yml down
+#   kill switch: LAB_TRIGGER=off docker compose -f deploy/docker-compose.api.yml up -d
+
+name: routing-lab-api
+
+services:
+  lab-api:
+    build: ../api
+    container_name: lab-api
+    restart: unless-stopped
+    networks:
+      - default
+      - apps_default
+    volumes:
+      - ../dashboard/dist:/app/static:ro
+      - ../reports:/app/reports:ro
+      - ../queue:/app/queue
+      - ../docs:/app/docs:ro
+      - ../prober/history:/app/prober-history:ro
+    environment:
+      - LAB_TRIGGER=${LAB_TRIGGER:-on}
+      - LAB_PROBER_HISTORY_DIR=/app/prober-history
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  apps_default:
+    external: true

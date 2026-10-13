@@ -1,0 +1,5 @@
+# routing-lab battery executor - single pass every minute (install: deploy/cron/README.md).
+# Total command per tick; a missing queue entry costs milliseconds. Overlap is
+# harmless: the executor is single-instance safe (flock on queue/.executor.lock).
+# Runs the PROD lab stack (deploy/docker-compose.lab.yml) and exits when idle.
+* * * * * cd /home/server/stacks/routing-lab && EXECUTOR_COMPOSE_FILE=deploy/docker-compose.lab.yml ./deploy/executor.sh --once >> queue/executor.cron.log 2>&1
