@@ -10,15 +10,17 @@ interface SectionProps {
 
 export function Section({ id, index, title, children }: SectionProps) {
   return (
-    <section id={id} className="scroll-mt-20 border-t border-line/40 py-14 sm:py-20">
-      <div className="mx-auto max-w-5xl px-5 sm:px-8">
+    <section id={id} className="scroll-mt-16 pt-14 sm:pt-[4.125rem]">
+      <div className="mx-auto max-w-[75rem] px-5 sm:px-8">
         <Reveal>
-          <p className="font-mono text-xs tracking-[0.3em] text-accent">{index}</p>
-          <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
-            {title}
-          </h2>
+          <div className="flex items-baseline gap-4 border-t border-ink pt-3">
+            <p className="font-mono text-xs text-dim">{index}</p>
+            <h2 className="font-display text-3xl font-light tracking-tight sm:text-[2.5rem]">
+              {title}
+            </h2>
+          </div>
         </Reveal>
-        <div className="mt-8 sm:mt-11">{children}</div>
+        <div className="mt-6 sm:mt-8">{children}</div>
       </div>
     </section>
   )

@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { fetchFleet } from '../lib/api'
 import { errorMessage, formatUtc, formatUtcSeconds } from '../lib/format'
 import type { FleetProbe, FleetSummary } from '../lib/types'
-import { buttonGhost, card, cardGlow } from '../lib/ui'
+import { buttonGhost, card } from '../lib/ui'
 import { RefreshIcon } from './Icons'
 import { Section } from './Section'
 
 const badgeBase =
-  'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-mono text-[11px]'
+  'inline-flex items-center gap-1.5 border px-2.5 py-0.5 font-mono text-[11px]'
 
 const classTones: Record<string, string> = {
   ok: 'border-ok/40 bg-ok/10 text-ok',
@@ -22,7 +22,7 @@ const classTones: Record<string, string> = {
 }
 
 function ClassBadge({ name, count }: { name: string; count?: number }) {
-  const tone = classTones[name] ?? 'border-line bg-white/5 text-muted'
+  const tone = classTones[name] ?? 'border-line bg-black/5 text-muted'
   return (
     <span className={`${badgeBase} ${tone}`}>
       {name}
@@ -40,7 +40,7 @@ function okRateTone(rate: number, total: number): string {
 
 function StatCard({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-line bg-bg-soft/60 p-5">
+    <div className="border border-line bg-bg-soft p-5">
       <p className="font-mono text-[11px] tracking-wider text-dim uppercase">{label}</p>
       {children}
     </div>
@@ -55,7 +55,7 @@ function SectionHeading({ children }: { children: ReactNode }) {
 
 function RecentProbeRow({ probe }: { probe: FleetProbe }) {
   return (
-    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line/30 px-4 py-1.5 font-mono text-xs first:border-t-0">
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line px-4 py-1.5 font-mono text-xs first:border-t-0">
       <span className="text-dim">{formatUtcSeconds(probe.ts)}</span>
       <span className="min-w-0 flex-1 truncate text-muted">{probe.model ?? '-'}</span>
       {probe.class ? <ClassBadge name={probe.class} /> : null}
@@ -92,14 +92,14 @@ function FleetContent({ fleet }: { fleet: FleetSummary }) {
     <div className="space-y-8">
       <div className="grid gap-4 sm:grid-cols-2">
         <StatCard label="Probes today">
-          <p className="mt-2 font-mono text-3xl font-semibold tracking-tight">
+          <p className="mt-2 font-mono text-3xl font-normal tracking-tight">
             {budget.count}
             <span className="text-dim">/{budget.cap}</span>
           </p>
           <p className="mt-1 font-mono text-xs text-dim">UTC {budget.date}</p>
         </StatCard>
         <StatCard label="Last 24h">
-          <p className="mt-2 font-mono text-3xl font-semibold tracking-tight">{window24h.total}</p>
+          <p className="mt-2 font-mono text-3xl font-normal tracking-tight">{window24h.total}</p>
           <p className="mt-1 font-mono text-xs">
             <span className="text-dim">ok {window24h.ok} · </span>
             <span className={okRateTone(window24h.ok_rate, window24h.total)}>{okPct}% ok</span>
@@ -123,7 +123,7 @@ function FleetContent({ fleet }: { fleet: FleetSummary }) {
       <div>
         <SectionHeading>Models</SectionHeading>
         {models.length > 0 ? (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-line">
+          <div className="mt-3 overflow-x-auto border border-line">
             <table className="w-full min-w-[36rem] border-collapse text-sm">
               <thead>
                 <tr className="text-left font-mono text-[11px] tracking-wider text-dim uppercase">
@@ -146,7 +146,7 @@ function FleetContent({ fleet }: { fleet: FleetSummary }) {
               </thead>
               <tbody>
                 {models.map((row) => (
-                  <tr key={row.model} className="border-t border-line/40">
+                  <tr key={row.model} className="border-t border-line">
                     <td className="px-4 py-2.5 font-mono text-xs text-ink">{row.model}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted">{row.probes_24h}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted">{row.ok_24h}</td>
@@ -173,7 +173,7 @@ function FleetContent({ fleet }: { fleet: FleetSummary }) {
       <div>
         <SectionHeading>Recent probes</SectionHeading>
         {recent.length > 0 ? (
-          <ol className="mt-3 max-h-96 overflow-y-auto rounded-xl border border-line bg-bg-soft/40">
+          <ol className="mt-3 max-h-96 overflow-y-auto border border-line bg-bg-soft">
             {recent.map((probe, index) => (
               <RecentProbeRow key={`${probe.ts}-${index}`} probe={probe} />
             ))}
@@ -210,13 +210,13 @@ export function FleetSection() {
 
   return (
     <Section id="fleet" index="04" title="Fleet">
-      <div className={`${card} ${cardGlow} p-6 sm:p-8`}>
+      <div className={`${card} p-6 sm:p-8`}>
         {loading && !fleet ? (
           <div className="animate-pulse space-y-3" role="status" aria-label="Loading fleet data">
-            <div className="h-4 w-44 rounded bg-line/70" />
-            <div className="h-3 w-full rounded bg-line/50" />
-            <div className="h-3 w-5/6 rounded bg-line/50" />
-            <div className="h-3 w-4/6 rounded bg-line/50" />
+            <div className="h-4 w-44  bg-line/70" />
+            <div className="h-3 w-full  bg-line/50" />
+            <div className="h-3 w-5/6  bg-line/50" />
+            <div className="h-3 w-4/6  bg-line/50" />
           </div>
         ) : !fleet && error ? (
           <div>

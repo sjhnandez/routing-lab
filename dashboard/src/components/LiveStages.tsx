@@ -22,7 +22,7 @@ function StateIcon({ kind }: { kind: IconKind }) {
         ) : kind === 'bad' ? (
           <XIcon className="h-4 w-4 text-bad" />
         ) : (
-          <span className="h-2 w-2 rounded-full border border-line" />
+          <span className="h-2 w-2 border border-dim" />
         )}
       </motion.span>
     </span>
@@ -31,7 +31,7 @@ function StateIcon({ kind }: { kind: IconKind }) {
 
 const stepText: Record<StepState, string> = {
   pending: 'text-dim',
-  running: 'text-accent',
+  running: 'text-ink',
   done: 'text-ok',
   failed: 'text-bad',
 }
@@ -52,7 +52,7 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
 
 const scenarioText: Record<ScenarioSlot['state'], string> = {
   pending: 'text-dim',
-  running: 'text-accent',
+  running: 'text-ink',
   pass: 'text-ok',
   fail: 'text-bad',
 }
@@ -99,13 +99,13 @@ export function LiveStages({ progress, live }: LiveStagesProps) {
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="mt-6 rounded-xl border border-line bg-bg-soft/70 p-4 sm:p-5"
+      className="mt-6 border border-line bg-bg-soft p-4 sm:p-5"
     >
       <div className="flex items-center gap-2">
         <span
-          className={`h-1.5 w-1.5 rounded-full ${
+          className={`h-1.5 w-1.5 ${
             live
-              ? 'animate-pulse bg-accent motion-reduce:animate-none'
+              ? 'animate-pulse bg-ink motion-reduce:animate-none'
               : failed
                 ? 'bg-bad'
                 : finished
@@ -113,7 +113,7 @@ export function LiveStages({ progress, live }: LiveStagesProps) {
                   : 'bg-dim'
           }`}
         />
-        <h3 className="font-display text-sm font-semibold">Live stages</h3>
+        <h3 className="font-display text-sm font-normal">Live stages</h3>
         {progress.runId ? (
           <span className="hidden font-mono text-[11px] text-dim sm:inline">{progress.runId}</span>
         ) : null}
@@ -122,9 +122,9 @@ export function LiveStages({ progress, live }: LiveStagesProps) {
         </span>
       </div>
 
-      <div className="mt-3 h-1 overflow-hidden rounded-full bg-line/60">
+      <div className="mt-3 h-1 overflow-hidden bg-line">
         <div
-          className="h-full rounded-full bg-linear-to-r from-accent to-accent2 transition-[width] duration-500 motion-reduce:transition-none"
+          className="h-full bg-ink transition-[width] duration-500 motion-reduce:transition-none"
           style={{ width: `${finished ? 100 : Math.round((resolved / total) * 100)}%` }}
         />
       </div>
@@ -132,17 +132,17 @@ export function LiveStages({ progress, live }: LiveStagesProps) {
       <div className="mt-3 space-y-0.5">
         <StepRow label="Queued" state={progress.queued} />
         <StepRow label="Booting lab" state={progress.boot} />
-        <div className="my-1 border-t border-line/50" />
+        <div className="my-1 border-t border-line" />
         {progress.scenarios.map((slot) => (
           <ScenarioRow key={slot.id} slot={slot} />
         ))}
-        <div className="my-1 border-t border-line/50" />
+        <div className="my-1 border-t border-line" />
         <StepRow label="Teardown" state={progress.teardown} />
         <StepRow label={failed ? 'Failed' : 'Done'} state={progress.done} />
       </div>
 
       {progress.errorMessage ? (
-        <p className="mt-3 rounded-lg border border-bad/40 bg-bad/10 px-3 py-2 text-xs leading-relaxed text-bad">
+        <p className="mt-3 border border-bad/40 bg-bad/10 px-3 py-2 text-xs leading-relaxed text-bad">
           {progress.errorMessage}
         </p>
       ) : null}

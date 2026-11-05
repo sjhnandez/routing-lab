@@ -2,7 +2,7 @@ import type { FormEvent } from 'react'
 import { useState } from 'react'
 import { useChat } from '../hooks/useChat'
 import type { ChatMeta } from '../lib/types'
-import { buttonSolid, card, cardGlow, spinnerOnGradient } from '../lib/ui'
+import { buttonSolid, card, spinnerOnGradient } from '../lib/ui'
 import { Reveal } from './Reveal'
 
 /** Client mirror of the server's LAB_CHAT_MAX_CHARS default. */
@@ -42,11 +42,11 @@ export function ChatSection() {
   }
 
   return (
-    <section id="chat" className="scroll-mt-20">
-      <div className="mx-auto max-w-5xl px-5 pt-10 sm:px-8 sm:pt-12">
+    <section id="chat" className="scroll-mt-16">
+      <div className="mx-auto max-w-[75rem] px-5 pt-14 sm:px-8 sm:pt-[4.125rem]">
         <Reveal>
-          <div className={`${card} ${cardGlow} p-6 sm:p-8`}>
-            <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+          <div className={`${card} p-6 sm:p-8`}>
+            <h2 className="font-display text-3xl font-light tracking-tight sm:text-4xl">
               Try the router
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
@@ -65,14 +65,14 @@ export function ChatSection() {
                 const attribution = turn.meta ? attributionLine(turn.meta) : null
                 return (
                   <div key={turn.id} className="space-y-2">
-                    <p className="ml-auto w-fit max-w-[85%] rounded-2xl border border-line bg-surface/60 px-3.5 py-2.5 text-sm whitespace-pre-wrap text-ink">
+                    <p className="ml-auto w-fit max-w-[85%] border border-line bg-surface px-3.5 py-2.5 text-sm whitespace-pre-wrap text-ink">
                       {turn.question}
                     </p>
                     <div className="space-y-2">
                       {turn.reasoning ? (
                         <div
                           data-testid="chat-thinking"
-                          className="rounded-xl border border-line/60 bg-bg-soft/60 px-3 py-2"
+                          className="border border-line bg-bg-soft px-3 py-2"
                         >
                           <p className="font-mono text-[10px] tracking-[0.25em] text-dim uppercase">
                             thinking
@@ -132,7 +132,7 @@ export function ChatSection() {
                 maxLength={MAX_CHARS}
                 placeholder="Ask the router anything…"
                 aria-label="Chat message"
-                className="w-full flex-1 rounded-full border border-line bg-bg-soft px-4 py-2.5 text-sm text-ink placeholder:text-dim focus:border-accent/60 focus:outline-none"
+                className="w-full flex-1 border border-line bg-bg-soft px-4 py-2.5 text-sm text-ink placeholder:text-dim focus:border-ink focus:outline-none"
               />
               <button
                 type="submit"
