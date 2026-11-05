@@ -1,7 +1,7 @@
 import { AnimatePresence } from 'motion/react'
 import type { RunPhase, RunProgress } from '../hooks/useRunController'
 import type { LabHealth } from '../lib/types'
-import { buttonSolid, card, cardGlow, spinnerOnGradient } from '../lib/ui'
+import { buttonSolid, card, spinnerOnGradient } from '../lib/ui'
 import { PlayIcon, XIcon } from './Icons'
 import { LiveStages } from './LiveStages'
 import { Reveal } from './Reveal'
@@ -62,13 +62,13 @@ export function RunPanel({
       : 'checking lab status…'
 
   return (
-    <section id="run" className="scroll-mt-20">
-      <div className="mx-auto max-w-5xl px-5 pt-10 sm:px-8 sm:pt-12">
+    <section id="run" className="scroll-mt-16">
+      <div className="mx-auto max-w-[75rem] px-5 pt-14 sm:px-8 sm:pt-[4.125rem]">
         <Reveal>
-          <div className={`${card} ${cardGlow} p-6 sm:p-8`}>
+          <div className={`${card} p-6 sm:p-8`}>
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-xl">
-                <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
+                <h2 className="font-display text-3xl font-light tracking-tight sm:text-4xl">
                   Run the battery
                 </h2>
                 <p className="mt-2 text-sm leading-relaxed text-muted">
@@ -76,7 +76,7 @@ export function RunPanel({
                   Stages stream live below; the report lands in Results.
                 </p>
                 <div className="mt-4 flex items-center gap-2 font-mono text-[11px] text-dim">
-                  <span className={`h-1.5 w-1.5 rounded-full ${healthDot}`} />
+                  <span className={`h-2 w-2 ${healthDot}`} />
                   <span>{healthText}</span>
                 </div>
               </div>
@@ -108,7 +108,7 @@ export function RunPanel({
             </div>
 
             {error ? (
-              <div className="mt-5 flex items-start gap-3 rounded-xl border border-bad/40 bg-bad/10 px-4 py-3">
+              <div className="mt-5 flex items-start gap-3 border border-bad/40 bg-bad/10 px-4 py-3">
                 <p className="min-w-0 flex-1 text-sm text-bad">{error}</p>
                 <button
                   type="button"

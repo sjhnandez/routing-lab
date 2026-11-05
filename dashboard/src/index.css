@@ -1,22 +1,28 @@
 @import "tailwindcss";
 
+/*
+ * Bench instrument. A near-white canvas, thin type, hairline rules, zero radius
+ * and no shadows or gradients. Depth comes only from full-bleed carbon bands.
+ * Color is rationed to meaning: green / red / amber report state, blue is a link.
+ */
 @theme {
-  --color-bg: #0a0c10;
-  --color-bg-soft: #0d1017;
-  --color-surface: #121724;
-  --color-line: #202839;
-  --color-ink: #e8ecf4;
-  --color-muted: #a3aec4;
-  --color-dim: #6f7c94;
-  --color-accent: #4f8cff;
-  --color-accent2: #8b5cf6;
-  --color-ok: #34d399;
-  --color-bad: #f87171;
-  --color-warn: #fbbf24;
+  --color-bg: #f6f8f7;
+  --color-bg-soft: #eff1f0;
+  --color-surface: #ffffff;
+  --color-carbon: #0f0e12;
+  --color-line: #d9dbda;
+  --color-ink: #0f0e12;
+  --color-muted: #3f3f44;
+  --color-dim: #66666c;
+  --color-accent: #0071bb;
+  --color-ok: #0a7a42;
+  --color-bad: #c4122f;
+  --color-warn: #8a5800;
+  --color-amber: #f0a800;
 
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-display: "Space Grotesk Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @layer base {
@@ -39,28 +45,12 @@
   }
 
   ::selection {
-    background: rgba(79, 140, 255, 0.35);
+    background: var(--color-ink);
+    color: var(--color-bg);
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-accent);
-    outline-offset: 3px;
-    border-radius: 3px;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
   }
-}
-
-/* Accent gradient used for display text and primary actions. */
-@utility gradient-text {
-  background-image: linear-gradient(100deg, var(--color-accent), var(--color-accent2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-/* Soft gradient mesh behind the header. */
-@utility mesh {
-  background-image:
-    radial-gradient(42rem 22rem at 10% -6%, rgba(79, 140, 255, 0.2), transparent 68%),
-    radial-gradient(38rem 20rem at 92% 4%, rgba(139, 92, 246, 0.17), transparent 70%),
-    radial-gradient(30rem 18rem at 50% 118%, rgba(79, 140, 255, 0.1), transparent 70%);
 }

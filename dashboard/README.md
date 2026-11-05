@@ -6,9 +6,9 @@ stage streams back over SSE until the results and history tables refresh
 themselves — no page reload.
 
 Stack: React 19 · Vite 8 · TypeScript 7 (strict) · Tailwind CSS v4 · `motion`
-· `react-markdown`. Same design language as the profile site: dark `#0a0c10`,
-accent gradient `#4f8cff → #8b5cf6`, Space Grotesk / Inter / JetBrains Mono
-via `@fontsource-variable/*`.
+· `react-markdown`. Design language: a flat bench instrument. Near-white canvas `#f6f8f7`, carbon
+bands `#0f0e12`, hairlines, zero radius, color only for state. IBM Plex Sans /
+IBM Plex Mono via `@fontsource`.
 
 ## Build
 

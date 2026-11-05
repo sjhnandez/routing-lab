@@ -1,7 +1,7 @@
 import { reportDownloadUrl } from '../lib/api'
 import { formatSeconds, formatUtc } from '../lib/format'
 import type { HistoryEntry } from '../lib/types'
-import { buttonGhost, card, cardGlow, spinnerAccent } from '../lib/ui'
+import { buttonGhost, card, spinnerAccent } from '../lib/ui'
 import { DownloadIcon, RefreshIcon } from './Icons'
 
 interface HistoryTableProps {
@@ -26,12 +26,12 @@ export function HistoryTable({
   onRetry,
 }: HistoryTableProps) {
   return (
-    <div className={`${card} ${cardGlow}`}>
+    <div className={`${card}`}>
       {loading && entries.length === 0 ? (
         <div className="animate-pulse p-6 sm:p-8" role="status" aria-label="Loading run history">
           <div className="space-y-2">
             {Array.from({ length: 4 }, (_, index) => (
-              <div key={index} className="h-8 rounded bg-line/40" />
+              <div key={index} className="h-8  bg-line/40" />
             ))}
           </div>
         </div>
@@ -79,15 +79,15 @@ export function HistoryTable({
                 return (
                   <tr
                     key={entry.run_id}
-                    className={`border-t border-line/40 transition hover:bg-white/5 ${
-                      current ? 'bg-accent/5' : ''
+                    className={`border-t border-line transition hover:bg-black/5 ${
+                      current ? 'bg-black/5' : ''
                     }`}
                   >
                     <td className="px-6 py-3 font-mono text-xs text-muted sm:px-8">
                       {formatUtc(entry.started_at)}
                     </td>
                     <td className="px-3 py-3">
-                      <span className="rounded-full border border-line px-2.5 py-0.5 font-mono text-[11px] text-dim">
+                      <span className="border border-line px-2.5 py-0.5 font-mono text-[11px] text-dim">
                         {entry.profile}
                       </span>
                     </td>
@@ -111,7 +111,7 @@ export function HistoryTable({
                           disabled={loadingThis}
                           aria-current={current ? 'true' : undefined}
                           className={`${buttonGhost} px-3 py-1 text-xs ${
-                            current ? 'border-accent/50 text-ink' : ''
+                            current ? 'border-ink text-ink' : ''
                           }`}
                         >
                           {loadingThis ? <span className={`h-3 w-3 ${spinnerAccent}`} /> : null}
@@ -134,7 +134,7 @@ export function HistoryTable({
             </tbody>
           </table>
           {error ? (
-            <p className="border-t border-line/40 px-6 py-2 text-xs text-warn sm:px-8">{error}</p>
+            <p className="border-t border-line px-6 py-2 text-xs text-warn sm:px-8">{error}</p>
           ) : null}
         </div>
       )}

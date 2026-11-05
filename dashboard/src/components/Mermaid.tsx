@@ -6,7 +6,7 @@ type MermaidApi = typeof import('mermaid').default
 let mermaidPromise: Promise<MermaidApi> | null = null
 let uidSeq = 0
 
-/** Dynamic import + one-time dark init, shared by every diagram on the page. */
+/** Dynamic import + one-time init, shared by every diagram on the page. */
 function loadMermaid(): Promise<MermaidApi> {
   mermaidPromise ??= import('mermaid').then(({ default: mermaid }) => {
     mermaid.initialize({
@@ -14,24 +14,24 @@ function loadMermaid(): Promise<MermaidApi> {
       securityLevel: 'strict',
       theme: 'base',
       themeVariables: {
-        darkMode: true,
-        background: '#0a0c10',
-        primaryColor: '#16213a',
-        primaryBorderColor: '#4f8cff',
-        primaryTextColor: '#e8ecf4',
-        secondaryColor: '#0d1017',
-        secondaryBorderColor: '#202839',
-        secondaryTextColor: '#a3aec4',
-        tertiaryColor: '#0d1017',
-        tertiaryBorderColor: '#202839',
-        tertiaryTextColor: '#a3aec4',
-        lineColor: '#4a5a7a',
-        textColor: '#a3aec4',
-        nodeTextColor: '#e8ecf4',
-        edgeLabelBackground: '#0a0c10',
-        clusterBkg: '#0d1017',
-        clusterBorder: '#202839',
-        fontFamily: '"Inter Variable", ui-sans-serif, system-ui, sans-serif',
+        darkMode: false,
+        background: '#ffffff',
+        primaryColor: '#ffffff',
+        primaryBorderColor: '#0f0e12',
+        primaryTextColor: '#0f0e12',
+        secondaryColor: '#eff1f0',
+        secondaryBorderColor: '#b2b2b2',
+        secondaryTextColor: '#3f3f44',
+        tertiaryColor: '#f6f8f7',
+        tertiaryBorderColor: '#d9dbda',
+        tertiaryTextColor: '#3f3f44',
+        lineColor: '#0f0e12',
+        textColor: '#3f3f44',
+        nodeTextColor: '#0f0e12',
+        edgeLabelBackground: '#ffffff',
+        clusterBkg: '#f6f8f7',
+        clusterBorder: '#d9dbda',
+        fontFamily: '"IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif',
         fontSize: '14px',
       },
     })
@@ -69,14 +69,14 @@ export function Mermaid({ chart }: { chart: string }) {
   if (svg !== null) {
     return (
       <div
-        className="mermaid-diagram mt-4 flex justify-center overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 [&>svg]:h-auto [&>svg]:max-w-full"
+        className="mermaid-diagram mt-4 flex justify-center overflow-x-auto border border-line bg-bg-soft p-4 [&>svg]:h-auto [&>svg]:max-w-full"
         dangerouslySetInnerHTML={{ __html: svg }}
       />
     )
   }
 
   return (
-    <pre className="mt-4 overflow-x-auto rounded-xl border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted">
+    <pre className="mt-4 overflow-x-auto border border-line bg-bg-soft p-4 font-mono text-xs leading-relaxed text-muted">
       {failed ? `${chart}\n\n(diagram unavailable - showing the mermaid source)` : chart}
     </pre>
   )

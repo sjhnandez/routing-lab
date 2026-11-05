@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { reportDownloadUrl } from '../lib/api'
 import { formatSeconds, formatUtc, shortImageDigest } from '../lib/format'
 import type { Report, ScenarioReport } from '../lib/types'
-import { buttonGhost, card, cardGlow, chip } from '../lib/ui'
+import { buttonGhost, card, chip } from '../lib/ui'
 import { CheckIcon, ChevronDownIcon, DownloadIcon, RefreshIcon, XIcon } from './Icons'
 import { Section } from './Section'
 import { StatusBadge } from './StatusBadge'
@@ -28,7 +28,7 @@ export function ResultsPanel({
 }: ResultsPanelProps) {
   return (
     <Section id="results" index="01" title="Results">
-      <div className={`${card} ${cardGlow}`}>
+      <div className={`${card}`}>
         {loading && !report ? (
           <ResultsSkeleton />
         ) : !report && error ? (
@@ -125,13 +125,13 @@ function ReportView({
       </div>
 
       {error ? (
-        <p className="border-t border-line/40 px-6 py-2.5 text-xs text-warn sm:px-8">{error}</p>
+        <p className="border-t border-line px-6 py-2.5 text-xs text-warn sm:px-8">{error}</p>
       ) : null}
 
-      <div className="overflow-x-auto border-t border-line/40">
+      <div className="overflow-x-auto border-t border-line">
         <table className="w-full min-w-[34rem] border-collapse text-sm">
           <thead>
-            <tr className="bg-bg-soft/60 text-left font-mono text-[11px] tracking-wider text-dim uppercase">
+            <tr className="bg-bg-soft text-left font-mono text-[11px] tracking-wider text-dim uppercase">
               <th scope="col" className="px-6 py-2.5 font-normal sm:px-8">
                 Scenario
               </th>
@@ -173,7 +173,7 @@ function ScenarioRow({
 }) {
   return (
     <>
-      <tr className="border-t border-line/40 transition hover:bg-white/5">
+      <tr className="border-t border-line transition hover:bg-black/5">
         <td className="px-6 py-3 sm:px-8">
           <button
             type="button"
@@ -202,7 +202,7 @@ function ScenarioRow({
             {scenario.served_by.map((served) => (
               <span
                 key={served.mode}
-                className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-dim"
+                className="border border-line px-2 py-0.5 font-mono text-[11px] text-dim"
               >
                 {served.mode} ×{served.hits}
               </span>
@@ -212,8 +212,10 @@ function ScenarioRow({
       </tr>
 
       {open ? (
-        <tr id={`scenario-${scenario.id}-detail`} className="border-t border-line/40 bg-bg-soft/50">
+        <tr id={`scenario-${scenario.id}-detail`} className="border-t border-line bg-bg-soft">
           <td colSpan={4} className="px-6 py-5 sm:px-8">
+            {/* On phones the table scrolls sideways; keep the detail pinned to the viewport. */}
+            <div className="max-sm:sticky max-sm:left-6 max-sm:max-w-[calc(100vw-5.625rem)]">
             <div className="grid gap-5 md:grid-cols-2">
               <div>
                 <p className="font-mono text-[11px] tracking-wider text-dim uppercase">Expected</p>
@@ -256,17 +258,18 @@ function ScenarioRow({
                 <ol className="mt-2 space-y-1">
                   {scenario.timeline.map((entry, index) => (
                     <li key={index} className="flex gap-3 font-mono text-[11px] leading-relaxed">
-                      <span className="w-14 shrink-0 text-right text-accent">
+                      <span className="w-14 shrink-0 text-right text-ink">
                         {entry.t.toFixed(3)}s
                       </span>
                       <span className="w-28 shrink-0 truncate text-ink sm:w-44" title={entry.event}>
                         {entry.event}
                       </span>
-                      <span className="min-w-0 flex-1 text-dim">{entry.detail}</span>
+                      <span className="min-w-0 flex-1 [overflow-wrap:anywhere] text-dim">{entry.detail}</span>
                     </li>
                   ))}
                 </ol>
               )}
+            </div>
             </div>
           </td>
         </tr>
@@ -278,17 +281,17 @@ function ScenarioRow({
 function ResultsSkeleton() {
   return (
     <div className="animate-pulse p-6 sm:p-8" role="status" aria-label="Loading latest report">
-      <div className="h-4 w-56 rounded bg-line/70" />
-      <div className="mt-3 h-3 w-40 rounded bg-line/50" />
+      <div className="h-4 w-56  bg-line/70" />
+      <div className="mt-3 h-3 w-40  bg-line/50" />
       <div className="mt-6 flex flex-wrap gap-2">
-        <div className="h-6 w-24 rounded-full bg-line/50" />
-        <div className="h-6 w-24 rounded-full bg-line/50" />
-        <div className="h-6 w-24 rounded-full bg-line/50" />
-        <div className="h-6 w-24 rounded-full bg-line/50" />
+        <div className="h-6 w-24 bg-line/50" />
+        <div className="h-6 w-24 bg-line/50" />
+        <div className="h-6 w-24 bg-line/50" />
+        <div className="h-6 w-24 bg-line/50" />
       </div>
       <div className="mt-6 space-y-2">
         {Array.from({ length: 8 }, (_, index) => (
-          <div key={index} className="h-8 rounded bg-line/40" />
+          <div key={index} className="h-8  bg-line/40" />
         ))}
       </div>
     </div>
