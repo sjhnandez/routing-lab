@@ -1,6 +1,6 @@
 import type { Report } from '../lib/types'
-import { GITHUB_URL } from '../lib/ui'
-import { GitHubIcon } from './Icons'
+import { GITHUB_URL, PORTAL_URL } from '../lib/ui'
+import { ArrowLeftIcon, GitHubIcon } from './Icons'
 import { ScenarioMatrix } from './ScenarioMatrix'
 
 const sectionLinks = [
@@ -11,6 +11,9 @@ const sectionLinks = [
   { href: '#method', label: 'Method' },
   { href: '#fleet', label: 'Fleet' },
 ]
+
+const headerLink =
+  'inline-flex items-center gap-1.5 text-[13px] whitespace-nowrap text-muted underline-offset-4 transition-colors hover:text-ink hover:underline'
 
 const heroLink =
   'inline-flex items-center gap-2 border border-[#3a393d] px-4 py-2 text-sm text-[#f6f8f7] transition-colors hover:border-[#f6f8f7]'
@@ -36,15 +39,16 @@ export function Header({ report }: { report: Report | null }) {
             ))}
           </nav>
 
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-[13px] text-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
-          >
-            <GitHubIcon className="h-3.5 w-3.5" />
-            GitHub
-          </a>
+          <div className="flex items-center gap-5">
+            <a href={PORTAL_URL} className={headerLink}>
+              <ArrowLeftIcon className="h-3.5 w-3.5" />
+              Return to portal
+            </a>
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={headerLink}>
+              <GitHubIcon className="h-3.5 w-3.5" />
+              GitHub
+            </a>
+          </div>
         </div>
       </header>
 

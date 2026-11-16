@@ -3,6 +3,9 @@
 /** Repository this dashboard reports on. */
 export const GITHUB_URL = 'https://github.com/sjhnandez/routing-lab'
 
+/** Homelab launcher this dashboard is listed in. */
+export const PORTAL_URL = 'https://portal.superseb.xyz'
+
 /** Base panel: a hairline frame on white. No radius, shadow or hover lift. */
 export const card = 'border border-line bg-surface'
 
